@@ -9,12 +9,12 @@
 <body>
   <div id="root"></div>
 
-  <!-- React 18 + ReactDOM vía CDN -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- React 18 + ReactDOM vía CDN (versión fijada, no "latest") -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
 
-  <!-- Babel Standalone: transforma JSX en el navegador (sin build) -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Babel Standalone: transforma JSX en el navegador (sin build). Versión fijada. -->
+  <script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
 
   <!-- Firebase SDK compat -->
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
@@ -27,6 +27,38 @@
   <!-- Archivos de la aplicación, en orden -->
   <script src="firebase-config.js"></script>
   <script src="permissions.js"></script>
-  <script type="text/babel" data-presets="react" src="app.js"></script>
+
+  <!--
+    app.js se carga y transforma manualmente (fetch + Babel.transform) en vez de
+    usar <script type="text/babel" src="app.js">. El "scanner" automático de
+    Babel Standalone para scripts externos es poco confiable entre versiones
+    (puede fallar con errores como "Cannot use import statement outside a
+    module" aunque el archivo no tenga imports). Este método es explícito y,
+    si algo falla, muestra el error en pantalla en vez de dejar la página en blanco.
+  -->
+  <script>
+    fetch("app.js")
+      .then((r) => {
+        if (!r.ok) throw new Error(`No se pudo cargar app.js (HTTP ${r.status})`);
+        return r.text();
+      })
+      .then((codigoFuente) => {
+        const { code } = Babel.transform(codigoFuente, {
+          presets: ["react"],
+          filename: "app.js",
+        });
+        const script = document.createElement("script");
+        script.text = code;
+        document.body.appendChild(script);
+      })
+      .catch((err) => {
+        console.error("Error iniciando la aplicación:", err);
+        document.getElementById("root").innerHTML =
+          '<div style="padding:24px;font-family:sans-serif;color:#c0392b">' +
+          "<h2>No se pudo iniciar la aplicación</h2><p>" +
+          (err && err.message ? err.message : String(err)) +
+          "</p><p>Revisá la consola del navegador (F12) para más detalle.</p></div>";
+      });
+  </script>
 </body>
 </html>
