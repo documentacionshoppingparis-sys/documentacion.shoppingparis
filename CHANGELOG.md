@@ -56,3 +56,27 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
   distintos formatos históricos en papel (presupuesto, orden de pago de
   productos/servicios/RR.HH., orden de cobro), que tienen diseños entre
   sí distintos.
+
+## [1.0.3] - 2026-09-16
+
+### Agregado
+- Campo "Código" (numérico) en el maestro de Sectores. Los sectores se
+  listan y se muestran en toda la aplicación como "código - nombre"
+  (ej. "5 - TESORERIA"), y se ordenan por código.
+- `seed-sectores.html`: página independiente para cargar, una sola vez,
+  los 9 sectores iniciales con su código (0 Operacional, 1 Servicios
+  Generales, 2 Electromecánica, 3 Seguridad, 4 Marketing, 5 Tesorería,
+  7 RRHH, 8 Comercial, 9 Obras — el código 6 no existe en el listado
+  original). Requiere iniciar sesión con un usuario administrador y
+  omite los códigos que ya existan, para poder ejecutarse más de una vez
+  sin duplicar.
+
+## [1.0.4] - 2026-09-16
+
+### Cambiado
+- El número de Presupuesto, Orden de Pago y Orden de Cobro ahora se
+  reserva en el momento de abrir el formulario "Nuevo" (como una hoja
+  numerada de talonario) y se muestra en el encabezado del formulario
+  desde el inicio, en vez de asignarse recién al guardar. Si el usuario
+  cancela sin guardar, ese número queda saltado (no se reutiliza),
+  igual que en un formulario de papel anulado.

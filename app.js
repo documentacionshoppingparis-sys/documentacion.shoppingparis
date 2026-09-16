@@ -323,10 +323,10 @@ function Campo({ campo, valor, onChange, opciones }) {
  * CRUD genérico para colecciones "maestro": empresas, tiendas, sectores,
  * personas, proveedores. No eliminan físicamente: usan baja lógica (activo).
  */
-function MaestroCRUD({ titulo, coleccion, campos, permisoAdmin, perfil, resolverOpciones }) {
+function MaestroCRUD({ titulo, coleccion, campos, permisoAdmin, perfil, resolverOpciones, orderBy }) {
   const puedeAdministrar = hasPermission(perfil.rol, permisoAdmin);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
-  const { items, cargando } = useColeccion(coleccion);
+  const { items, cargando } = useColeccion(coleccion, orderBy ? { orderBy } : {});
   const [editando, setEditando] = useState(null); // null = cerrado, {} = nuevo, {...} = edición
   const [opciones, setOpciones] = useState({});
 
@@ -492,11 +492,19 @@ function Tiendas({ perfil }) {
   );
 }
 
+/** Etiqueta consistente para mostrar un sector: "código - nombre". */
+function etiquetaSector(s) {
+  if (!s) return "";
+  return s.codigo !== undefined && s.codigo !== null && s.codigo !== "" ? `${s.codigo} - ${s.nombre}` : s.nombre;
+}
+
 function Sectores({ perfil }) {
   return (
     <MaestroCRUD
       titulo="Sectores" coleccion="sectores" perfil={perfil} permisoAdmin="administrarSectores"
+      orderBy={["codigo", "asc"]}
       campos={[
+        { campo: "codigo", label: "Código", tipo: "number", requerido: true },
         { campo: "nombre", label: "Nombre del sector", requerido: true },
         { campo: "descripcion", label: "Descripción" },
       ]}
@@ -506,11 +514,11 @@ function Sectores({ perfil }) {
 
 function Personas({ perfil }) {
   const { items: empresas } = useColeccion("empresas", { activosSolo: true });
-  const { items: sectores } = useColeccion("sectores", { activosSolo: true });
+  const { items: sectores } = useColeccion("sectores", { activosSolo: true, orderBy: ["codigo", "asc"] });
   const opcionesEmpresa = empresas.map((e) => ({ value: e.id, label: e.razonSocial }));
-  const opcionesSector = sectores.map((s) => ({ value: s.id, label: s.nombre }));
+  const opcionesSector = sectores.map((s) => ({ value: s.id, label: etiquetaSector(s) }));
   const mapaEmpresas = Object.fromEntries(empresas.map((e) => [e.id, e.razonSocial]));
-  const mapaSectores = Object.fromEntries(sectores.map((s) => [s.id, s.nombre]));
+  const mapaSectores = Object.fromEntries(sectores.map((s) => [s.id, etiquetaSector(s)]));
   return (
     <MaestroCRUD
       titulo="Personas / Responsables" coleccion="personas" perfil={perfil} permisoAdmin="administrarPersonas"
@@ -674,7 +682,7 @@ function DetalleLineas({ lineas, setLineas }) {
 function useContextoSelects() {
   const { items: empresas } = useColeccion("empresas", { activosSolo: true });
   const { items: tiendas } = useColeccion("tiendas", { activosSolo: true });
-  const { items: sectores } = useColeccion("sectores", { activosSolo: true });
+  const { items: sectores } = useColeccion("sectores", { activosSolo: true, orderBy: ["codigo", "asc"] });
   const { items: personas } = useColeccion("personas", { activosSolo: true });
   const { items: proveedores } = useColeccion("proveedores", { activosSolo: true });
   return { empresas, tiendas, sectores, personas, proveedores };
@@ -769,14 +777,23 @@ function Presupuestos({ perfil }) {
   const { empresas, tiendas, sectores, personas, proveedores } = useContextoSelects();
   const { items, cargando } = useColeccion("presupuestos", { orderBy: ["numero", "desc"] });
   const [form, setForm] = useState(null);
+  const [reservando, setReservando] = useState(false);
   const puedeCrear = hasPermission(perfil.rol, "crearPresupuestos");
   const puedeAprobar = hasPermission(perfil.rol, "aprobarPresupuestos");
 
-  const abrirNuevo = () => setForm({
-    empresaId: "", tiendaId: "", sectorId: "", proveedorId: "", solicitanteId: "",
-    moneda: "PYG", condiciones: "", formaPago: "", prioridad: "normal", observaciones: "",
-    detalle: [{ descripcion: "", cantidad: 1, precioUnitario: 0 }],
-  });
+  // El número se reserva al abrir el formulario (como una hoja numerada de
+  // talonario), para que quede visible desde el inicio y no recién al guardar.
+  const abrirNuevo = async () => {
+    setReservando(true);
+    const numero = await obtenerSiguienteNumero("presupuestoProveedor");
+    setReservando(false);
+    setForm({
+      numero,
+      empresaId: "", tiendaId: "", sectorId: "", proveedorId: "", solicitanteId: "",
+      moneda: "PYG", condiciones: "", formaPago: "", prioridad: "normal", observaciones: "",
+      detalle: [{ descripcion: "", cantidad: 1, precioUnitario: 0 }],
+    });
+  };
 
   const guardar = async (e) => {
     e.preventDefault();
@@ -786,14 +803,13 @@ function Presupuestos({ perfil }) {
     const proveedor = proveedores.find((x) => x.id === form.proveedorId);
     const solicitante = personas.find((x) => x.id === form.solicitanteId);
     const total = form.detalle.reduce((acc, l) => acc + (Number(l.cantidad) || 0) * (Number(l.precioUnitario) || 0), 0);
-    const numero = await obtenerSiguienteNumero("presupuestoProveedor");
 
     const registro = {
-      numero,
+      numero: form.numero,
       fecha: firebase.firestore.FieldValue.serverTimestamp(),
       empresaId: form.empresaId, empresaNombre: empresa ? empresa.razonSocial : null,
       tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
-      sectorId: form.sectorId || null, sectorNombre: sector ? sector.nombre : null,
+      sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
       proveedorId: form.proveedorId || null, proveedorNombre: proveedor ? proveedor.razonSocial : null,
       // Copia histórica del solicitante (sección 7): no depende del maestro de personas a futuro.
       solicitadoPor: solicitante ? { personaId: solicitante.id, nombre: `${solicitante.nombre} ${solicitante.apellido}`, cargo: solicitante.cargo || null, sector: sector ? sector.nombre : null } : null,
@@ -817,7 +833,7 @@ function Presupuestos({ perfil }) {
     <div className="panel">
       <div className="panel-header">
         <h2>Presupuestos de Proveedor</h2>
-        {puedeCrear && <button onClick={abrirNuevo}>+ Nuevo presupuesto</button>}
+        {puedeCrear && <button onClick={abrirNuevo} disabled={reservando}>{reservando ? "Generando N.º..." : "+ Nuevo presupuesto"}</button>}
       </div>
       {cargando ? <p>Cargando...</p> : (
         <table className="tabla">
@@ -847,7 +863,7 @@ function Presupuestos({ perfil }) {
       {form && (
         <div className="modal-fondo" onClick={() => setForm(null)}>
           <form className="modal-caja modal-grande" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
-            <h3>Nuevo Presupuesto</h3>
+            <h3>Nuevo Presupuesto <span className="numero-reservado">N.º {form.numero}</span></h3>
             <div className="grid-2">
               <div className="campo-form"><label>Empresa *</label>
                 <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value, tiendaId: "" })}>
@@ -864,7 +880,7 @@ function Presupuestos({ perfil }) {
               <div className="campo-form"><label>Sector</label>
                 <select value={form.sectorId} onChange={(e) => setForm({ ...form, sectorId: e.target.value })}>
                   <option value="">Seleccionar...</option>
-                  {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  {sectores.map((s) => <option key={s.id} value={s.id}>{etiquetaSector(s)}</option>)}
                 </select>
               </div>
               <div className="campo-form"><label>Proveedor</label>
@@ -916,16 +932,23 @@ function OrdenesPago({ perfil, tipo }) {
   const { items: presupuestosAprobados } = useColeccion("presupuestos", { where: [["estado", "==", "aprobado"]] });
   const { items, cargando } = useColeccion("ordenesPago", { where: [["tipo", "==", tipo]], orderBy: ["numero", "desc"] });
   const [form, setForm] = useState(null);
+  const [reservando, setReservando] = useState(false);
   const puedeCrear = hasPermission(perfil.rol, "crearOrdenes");
   const puedeAprobar = hasPermission(perfil.rol, "aprobarOrdenes");
   const puedePagar = hasPermission(perfil.rol, "procesarPagos");
 
-  const abrirNuevo = () => setForm({
-    empresaId: "", tiendaId: "", sectorId: "", proveedorId: "", solicitanteId: "",
-    presupuestoId: "", moneda: "PYG", concepto: "", condicionPago: "", formaPago: "",
-    facturas: "", observaciones: "",
-    detalle: [{ descripcion: "", cantidad: 1, precioUnitario: 0 }],
-  });
+  const abrirNuevo = async () => {
+    setReservando(true);
+    const numero = await obtenerSiguienteNumero(meta.contador);
+    setReservando(false);
+    setForm({
+      numero,
+      empresaId: "", tiendaId: "", sectorId: "", proveedorId: "", solicitanteId: "",
+      presupuestoId: "", moneda: "PYG", concepto: "", condicionPago: "", formaPago: "",
+      facturas: "", observaciones: "",
+      detalle: [{ descripcion: "", cantidad: 1, precioUnitario: 0 }],
+    });
+  };
 
   const guardar = async (e) => {
     e.preventDefault();
@@ -936,15 +959,14 @@ function OrdenesPago({ perfil, tipo }) {
     const solicitante = personas.find((x) => x.id === form.solicitanteId);
     const presupuesto = presupuestosAprobados.find((x) => x.id === form.presupuestoId);
     const total = form.detalle.reduce((acc, l) => acc + (Number(l.cantidad) || 0) * (Number(l.precioUnitario) || 0), 0);
-    const numero = await obtenerSiguienteNumero(meta.contador);
 
     const registro = {
-      tipo, numero,
+      tipo, numero: form.numero,
       fecha: firebase.firestore.FieldValue.serverTimestamp(),
       presupuestoId: form.presupuestoId || null, presupuestoNumero: presupuesto ? presupuesto.numero : null,
       empresaId: form.empresaId, empresaNombre: empresa ? empresa.razonSocial : null,
       tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
-      sectorId: form.sectorId || null, sectorNombre: sector ? sector.nombre : null,
+      sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
       proveedorId: form.proveedorId || null, proveedorNombre: proveedor ? proveedor.razonSocial : null,
       solicitadoPor: solicitante ? { personaId: solicitante.id, nombre: `${solicitante.nombre} ${solicitante.apellido}`, cargo: solicitante.cargo || null, sector: sector ? sector.nombre : null } : null,
       concepto: form.concepto, moneda: form.moneda, detalle: form.detalle, total,
@@ -967,7 +989,7 @@ function OrdenesPago({ perfil, tipo }) {
     <div className="panel">
       <div className="panel-header">
         <h2>{meta.label}</h2>
-        {puedeCrear && <button onClick={abrirNuevo}>+ Nueva orden</button>}
+        {puedeCrear && <button onClick={abrirNuevo} disabled={reservando}>{reservando ? "Generando N.º..." : "+ Nueva orden"}</button>}
       </div>
       {cargando ? <p>Cargando...</p> : (
         <table className="tabla">
@@ -995,7 +1017,7 @@ function OrdenesPago({ perfil, tipo }) {
       {form && (
         <div className="modal-fondo" onClick={() => setForm(null)}>
           <form className="modal-caja modal-grande" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
-            <h3>Nueva {meta.label}</h3>
+            <h3>Nueva {meta.label} <span className="numero-reservado">N.º {form.numero}</span></h3>
             <div className="grid-2">
               <div className="campo-form"><label>Empresa *</label>
                 <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value, tiendaId: "" })}>
@@ -1012,7 +1034,7 @@ function OrdenesPago({ perfil, tipo }) {
               <div className="campo-form"><label>Sector</label>
                 <select value={form.sectorId} onChange={(e) => setForm({ ...form, sectorId: e.target.value })}>
                   <option value="">Seleccionar...</option>
-                  {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  {sectores.map((s) => <option key={s.id} value={s.id}>{etiquetaSector(s)}</option>)}
                 </select>
               </div>
               {(tipo === "productos" || tipo === "servicios") && (
@@ -1073,13 +1095,20 @@ function OrdenesCobro({ perfil }) {
   const { empresas, tiendas, sectores, personas } = useContextoSelects();
   const { items, cargando } = useColeccion("ordenesCobro", { orderBy: ["numero", "desc"] });
   const [form, setForm] = useState(null);
+  const [reservando, setReservando] = useState(false);
   const puedeCrear = hasPermission(perfil.rol, "crearOrdenes");
   const puedeAprobar = hasPermission(perfil.rol, "aprobarOrdenes");
 
-  const abrirNuevo = () => setForm({
-    empresaId: "", tiendaId: "", sectorId: "", responsableId: "",
-    obligado: "", concepto: "", moneda: "PYG", importe: 0, observaciones: "",
-  });
+  const abrirNuevo = async () => {
+    setReservando(true);
+    const numero = await obtenerSiguienteNumero("ordenCobro");
+    setReservando(false);
+    setForm({
+      numero,
+      empresaId: "", tiendaId: "", sectorId: "", responsableId: "",
+      obligado: "", concepto: "", moneda: "PYG", importe: 0, observaciones: "",
+    });
+  };
 
   const guardar = async (e) => {
     e.preventDefault();
@@ -1087,12 +1116,11 @@ function OrdenesCobro({ perfil }) {
     const tienda = tiendas.find((x) => x.id === form.tiendaId);
     const sector = sectores.find((x) => x.id === form.sectorId);
     const responsable = personas.find((x) => x.id === form.responsableId);
-    const numero = await obtenerSiguienteNumero("ordenCobro");
     const registro = {
-      numero, fecha: firebase.firestore.FieldValue.serverTimestamp(),
+      numero: form.numero, fecha: firebase.firestore.FieldValue.serverTimestamp(),
       empresaId: form.empresaId, empresaNombre: empresa ? empresa.razonSocial : null,
       tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
-      sectorId: form.sectorId || null, sectorNombre: sector ? sector.nombre : null,
+      sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
       obligado: form.obligado, concepto: form.concepto,
       responsablePor: responsable ? { personaId: responsable.id, nombre: `${responsable.nombre} ${responsable.apellido}`, cargo: responsable.cargo || null } : null,
       moneda: form.moneda, total: Number(form.importe) || 0,
@@ -1114,7 +1142,7 @@ function OrdenesCobro({ perfil }) {
     <div className="panel">
       <div className="panel-header">
         <h2>Órdenes de Cobro</h2>
-        {puedeCrear && <button onClick={abrirNuevo}>+ Nueva orden de cobro</button>}
+        {puedeCrear && <button onClick={abrirNuevo} disabled={reservando}>{reservando ? "Generando N.º..." : "+ Nueva orden de cobro"}</button>}
       </div>
       {cargando ? <p>Cargando...</p> : (
         <table className="tabla">
@@ -1139,7 +1167,7 @@ function OrdenesCobro({ perfil }) {
       {form && (
         <div className="modal-fondo" onClick={() => setForm(null)}>
           <form className="modal-caja" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
-            <h3>Nueva Orden de Cobro</h3>
+            <h3>Nueva Orden de Cobro <span className="numero-reservado">N.º {form.numero}</span></h3>
             <div className="campo-form"><label>Empresa *</label>
               <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value })}>
                 <option value="">Seleccionar...</option>
@@ -1155,7 +1183,7 @@ function OrdenesCobro({ perfil }) {
             <div className="campo-form"><label>Sector</label>
               <select value={form.sectorId} onChange={(e) => setForm({ ...form, sectorId: e.target.value })}>
                 <option value="">Seleccionar...</option>
-                {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                {sectores.map((s) => <option key={s.id} value={s.id}>{etiquetaSector(s)}</option>)}
               </select>
             </div>
             <div className="campo-form"><label>Persona/empresa obligada al pago *</label><input required value={form.obligado} onChange={(e) => setForm({ ...form, obligado: e.target.value })} /></div>

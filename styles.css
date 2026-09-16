@@ -190,7 +190,8 @@ textarea { min-height: 60px; resize: vertical; }
   max-width: 100%;
 }
 .modal-grande { width: 640px; }
-.modal-caja h3 { margin-top: 0; }
+.modal-caja h3 { margin-top: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.numero-reservado { font-size: 13px; font-weight: 600; color: var(--color-primario); background: #eaf1fb; padding: 3px 10px; border-radius: 20px; }
 .campo-form { margin-bottom: 12px; }
 .campo-form label { display: block; font-size: 13px; margin-bottom: 4px; color: var(--color-texto-suave); }
 .modal-acciones { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
