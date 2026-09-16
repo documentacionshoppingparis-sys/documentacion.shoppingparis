@@ -113,3 +113,14 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
 - Los demás documentos (Órdenes de Pago y Orden de Cobro) siguen usando
   el encabezado genérico por ahora; se irán migrando a su propio formato
   uno por uno.
+
+## [1.0.7] - 2026-09-16
+
+### Agregado
+- Campo "Logo" también en el maestro de Tiendas/Sucursales (Maestros >
+  Tiendas / Sucursales), para las sucursales que tienen su propio logo
+  distinto al de la empresa matriz (ej. "Punto Eléctrico" dentro de
+  K&K Shopping's).
+- El PDF del Presupuesto de Proveedor ahora usa el logo de la tienda/
+  sucursal seleccionada si tiene uno cargado; si no, usa el logo de la
+  empresa.

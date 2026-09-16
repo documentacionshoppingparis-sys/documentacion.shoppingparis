@@ -498,6 +498,7 @@ function Tiendas({ perfil }) {
       titulo="Tiendas / Sucursales" coleccion="tiendas" perfil={perfil} permisoAdmin="administrarTiendas"
       resolverOpciones={async () => ({ empresaId: mapaEmpresas })}
       campos={[
+        { campo: "logoBase64", label: "Logo (opcional, si es distinto al de la empresa)", tipo: "imagen" },
         { campo: "empresaId", label: "Empresa", tipo: "select", opciones: opcionesEmpresa, requerido: true },
         { campo: "cod", label: "Código (COD)", requerido: true },
         { campo: "nombre", label: "Nombre de tienda/sucursal", requerido: true },
@@ -807,17 +808,20 @@ function generarPDF(titulo, doc, empresa) {
  * tabla de detalle, observaciones en rojo, condiciones, textos legales
  * fijos y caja de firma "Solicitado por".
  */
-function generarPDFPresupuesto(doc, empresa) {
+function generarPDFPresupuesto(doc, empresa, tienda) {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ unit: "mm", format: "a4" });
   const ML = 14, MR = 196;
   const anchoUtil = MR - ML;
 
   // --- Encabezado: logo, título, caja de N.º y fecha ---
-  if (empresa && empresa.logoBase64) {
+  // El logo de la tienda/sucursal tiene prioridad; si no tiene uno propio
+  // cargado, se usa el logo de la empresa.
+  const logo = (tienda && tienda.logoBase64) || (empresa && empresa.logoBase64);
+  if (logo) {
     try {
-      const formato = empresa.logoBase64.indexOf("image/png") !== -1 ? "PNG" : "JPEG";
-      pdf.addImage(empresa.logoBase64, formato, ML, 9, 32, 26);
+      const formato = logo.indexOf("image/png") !== -1 ? "PNG" : "JPEG";
+      pdf.addImage(logo, formato, ML, 9, 32, 26);
     } catch (e) { console.warn("No se pudo insertar el logo:", e); }
   }
   pdf.setFont(undefined, "bold");
@@ -1017,7 +1021,7 @@ function Presupuestos({ perfil }) {
                 <td>{formatMoneda(it.total, it.moneda)}</td>
                 <td><span className="badge badge-azul">{ESTADOS_LABELS[it.estado] || it.estado}</span></td>
                 <td className="acciones-celda">
-                  <button className="btn-link" onClick={() => generarPDFPresupuesto(it, empresas.find((e) => e.id === it.empresaId))}>PDF</button>
+                  <button className="btn-link" onClick={() => generarPDFPresupuesto(it, empresas.find((e) => e.id === it.empresaId), tiendas.find((t) => t.id === it.tiendaId))}>PDF</button>
                   {puedeAprobar && it.estado === "pendiente" && (
                     <>
                       <button className="btn-link" onClick={() => cambiarEstado(it, "aprobado")}>Aprobar</button>
@@ -1449,7 +1453,7 @@ function Dashboard({ perfil }) {
 // ==========================================================================
 
 function Historial({ perfil }) {
-  const { empresas } = useContextoSelects();
+  const { empresas, tiendas } = useContextoSelects();
   const [tipoDoc, setTipoDoc] = useState("presupuestos");
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
@@ -1488,7 +1492,7 @@ function Historial({ perfil }) {
                 <td>{it.creadoPor}</td>
                 <td><button className="btn-link" onClick={() => {
                   const empresa = empresas.find((e) => e.id === it.empresaId);
-                  if (tipoDoc === "presupuestos") { generarPDFPresupuesto(it, empresa); return; }
+                  if (tipoDoc === "presupuestos") { generarPDFPresupuesto(it, empresa, tiendas.find((t) => t.id === it.tiendaId)); return; }
                   const titulo = it.tipo && TIPOS_ORDEN[it.tipo] ? TIPOS_ORDEN[it.tipo].label : (tipoDoc === "ordenesCobro" ? "Orden de Cobro" : "Orden de Pago");
                   generarPDF(titulo, it, empresa);
                 }}>PDF</button></td>
