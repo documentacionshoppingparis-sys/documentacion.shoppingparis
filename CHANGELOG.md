@@ -80,3 +80,17 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
   desde el inicio, en vez de asignarse recién al guardar. Si el usuario
   cancela sin guardar, ese número queda saltado (no se reutiliza),
   igual que en un formulario de papel anulado.
+
+## [1.0.5] - 2026-09-16
+
+### Corregido
+- El combo de Sector en Presupuestos, Órdenes de Pago y Órdenes de Cobro
+  no mostraba opciones: la consulta a Firestore ordenaba por el campo
+  `codigo`, lo que excluye silenciosamente cualquier sector que no tenga
+  ese campo cargado. El ordenamiento por código ahora se hace en el
+  cliente (en Sectores, Personas y en los selects de documentos), para
+  que ningún sector quede oculto aunque le falte el código.
+
+### Agregado
+- La versión del sistema (v{APP_VERSION}) ahora se muestra siempre
+  visible en el encabezado del panel lateral, además del pie de página.

@@ -243,7 +243,10 @@ const MENU = [
 function Sidebar({ perfil, vista, setVista }) {
   return (
     <nav className="sidebar">
-      <div className="brand">Sistema Multiempresa</div>
+      <div className="brand">
+        Sistema Multiempresa
+        <span className="brand-version">v{APP_VERSION}</span>
+      </div>
       <ul>
         {MENU.map((item, i) =>
           item.grupo ? (
@@ -323,10 +326,10 @@ function Campo({ campo, valor, onChange, opciones }) {
  * CRUD genérico para colecciones "maestro": empresas, tiendas, sectores,
  * personas, proveedores. No eliminan físicamente: usan baja lógica (activo).
  */
-function MaestroCRUD({ titulo, coleccion, campos, permisoAdmin, perfil, resolverOpciones, orderBy }) {
+function MaestroCRUD({ titulo, coleccion, campos, permisoAdmin, perfil, resolverOpciones, ordenarCliente }) {
   const puedeAdministrar = hasPermission(perfil.rol, permisoAdmin);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
-  const { items, cargando } = useColeccion(coleccion, orderBy ? { orderBy } : {});
+  const { items, cargando } = useColeccion(coleccion);
   const [editando, setEditando] = useState(null); // null = cerrado, {} = nuevo, {...} = edición
   const [opciones, setOpciones] = useState({});
 
@@ -338,7 +341,7 @@ function MaestroCRUD({ titulo, coleccion, campos, permisoAdmin, perfil, resolver
     return () => { activo = false; };
   }, [resolverOpciones]);
 
-  const visibles = items.filter((i) => mostrarInactivos || i.activo !== false);
+  const visibles = (ordenarCliente ? ordenarCliente(items) : items).filter((i) => mostrarInactivos || i.activo !== false);
 
   const abrirNuevo = () => {
     const base = {};
@@ -498,11 +501,25 @@ function etiquetaSector(s) {
   return s.codigo !== undefined && s.codigo !== null && s.codigo !== "" ? `${s.codigo} - ${s.nombre}` : s.nombre;
 }
 
+/**
+ * Ordena sectores por código de forma segura en el cliente (en vez de usar
+ * orderBy de Firestore, que excluiría silenciosamente cualquier sector sin
+ * el campo "codigo" cargado). Los que no tienen código quedan al final.
+ */
+function ordenarSectores(lista) {
+  return [...lista].sort((a, b) => {
+    const ca = a.codigo === undefined || a.codigo === null || a.codigo === "" ? Infinity : Number(a.codigo);
+    const cb = b.codigo === undefined || b.codigo === null || b.codigo === "" ? Infinity : Number(b.codigo);
+    if (ca !== cb) return ca - cb;
+    return (a.nombre || "").localeCompare(b.nombre || "");
+  });
+}
+
 function Sectores({ perfil }) {
   return (
     <MaestroCRUD
       titulo="Sectores" coleccion="sectores" perfil={perfil} permisoAdmin="administrarSectores"
-      orderBy={["codigo", "asc"]}
+      ordenarCliente={ordenarSectores}
       campos={[
         { campo: "codigo", label: "Código", tipo: "number", requerido: true },
         { campo: "nombre", label: "Nombre del sector", requerido: true },
@@ -514,7 +531,8 @@ function Sectores({ perfil }) {
 
 function Personas({ perfil }) {
   const { items: empresas } = useColeccion("empresas", { activosSolo: true });
-  const { items: sectores } = useColeccion("sectores", { activosSolo: true, orderBy: ["codigo", "asc"] });
+  const { items: sectoresRaw } = useColeccion("sectores", { activosSolo: true });
+  const sectores = ordenarSectores(sectoresRaw);
   const opcionesEmpresa = empresas.map((e) => ({ value: e.id, label: e.razonSocial }));
   const opcionesSector = sectores.map((s) => ({ value: s.id, label: etiquetaSector(s) }));
   const mapaEmpresas = Object.fromEntries(empresas.map((e) => [e.id, e.razonSocial]));
@@ -682,7 +700,8 @@ function DetalleLineas({ lineas, setLineas }) {
 function useContextoSelects() {
   const { items: empresas } = useColeccion("empresas", { activosSolo: true });
   const { items: tiendas } = useColeccion("tiendas", { activosSolo: true });
-  const { items: sectores } = useColeccion("sectores", { activosSolo: true, orderBy: ["codigo", "asc"] });
+  const { items: sectoresRaw } = useColeccion("sectores", { activosSolo: true });
+  const sectores = ordenarSectores(sectoresRaw);
   const { items: personas } = useColeccion("personas", { activosSolo: true });
   const { items: proveedores } = useColeccion("proveedores", { activosSolo: true });
   return { empresas, tiendas, sectores, personas, proveedores };
