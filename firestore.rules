@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn(){ return request.auth != null; }
+    function userDoc(){ return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data; }
+    function active(){ return signedIn() && userDoc().activo == true; }
+    function role(){ return active() ? userDoc().rol : null; }
+    function admin(){ return role() == 'admin'; }
+    function operator(){ return role() == 'operador'; }
+    function approver(){ return role() == 'aprobador'; }
+    function treasury(){ return role() == 'tesoreria'; }
+    function canRead(){ return active(); }
+    function canCreateDocument(){ return admin() || operator(); }
+
+    match /usuarios/{uid} {
+      allow read: if active() && (request.auth.uid == uid || admin());
+      allow create, update: if admin();
+      allow delete: if false;
+    }
+
+    match /{collection}/{id} {
+      allow read: if canRead() && collection in ['empresas','tiendas','sectores','personas','responsables','proveedores'];
+      allow create, update: if admin() && collection in ['empresas','tiendas','sectores','personas','responsables','proveedores'];
+      allow delete: if false;
+    }
+
+    match /documentos/{id} {
+      allow read: if canRead();
+      allow create: if canCreateDocument();
+      allow update, delete: if false;
+    }
+
+    match /contadores/{id} {
+      allow read: if active();
+      allow create, update: if canCreateDocument();
+      allow delete: if false;
+    }
+  }
+}
