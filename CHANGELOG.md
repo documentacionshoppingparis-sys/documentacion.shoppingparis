@@ -39,3 +39,20 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
   y se integra dentro de "Orden de Pago - RR.HH.", distinguiéndose por el
   campo `concepto` (Pago a funcionario, Comisión, Incentivo, Bonificación,
   Otro), conforme a la sección 13 del documento maestro.
+
+## [1.0.2] - 2026-09-16
+
+### Agregado
+- Campo "Logo" en el registro de Empresas (Maestros > Empresas): carga de
+  imagen (PNG/JPEG/WEBP, hasta 400 KB) con vista previa, guardado como
+  imagen embebida en el propio documento de Firestore.
+- El PDF de cada documento (Presupuesto, Órdenes de Pago, Orden de Cobro)
+  ahora incluye en el encabezado el logo, la razón social, el RUC y la
+  dirección de la empresa emisora correspondiente.
+
+### Nota
+- El encabezado del PDF es un formato único y consistente para todos los
+  documentos; todavía no reproduce de forma exacta cada uno de los
+  distintos formatos históricos en papel (presupuesto, orden de pago de
+  productos/servicios/RR.HH., orden de cobro), que tienen diseños entre
+  sí distintos.

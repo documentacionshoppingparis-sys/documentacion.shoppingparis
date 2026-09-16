@@ -273,6 +273,29 @@ function TopBar({ perfil, onLogout }) {
 // ==========================================================================
 
 function Campo({ campo, valor, onChange, opciones }) {
+  if (campo.tipo === "imagen") {
+    return (
+      <div className="campo-imagen">
+        {valor && <img src={valor} alt="Logo" className="logo-preview" />}
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            if (file.size > 400 * 1024) {
+              alert("La imagen es muy grande. Usá un logo de hasta 400 KB (ideal: PNG con fondo transparente).");
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => onChange(reader.result);
+            reader.readAsDataURL(file);
+          }}
+        />
+        {valor && <button type="button" className="btn-link" onClick={() => onChange("")}>Quitar logo</button>}
+      </div>
+    );
+  }
   if (campo.tipo === "select") {
     return (
       <select value={valor || ""} onChange={(e) => onChange(e.target.value)} required={campo.requerido}>
@@ -384,7 +407,13 @@ function MaestroCRUD({ titulo, coleccion, campos, permisoAdmin, perfil, resolver
               <tr key={item.id} className={item.activo === false ? "fila-inactiva" : ""}>
                 {campos.filter((c) => c.enLista !== false).map((c) => (
                   <td key={c.campo}>
-                    {c.tipo === "select" ? (opciones[c.campo] || {})[item[c.campo]] || item[c.campo] : String(item[c.campo] ?? "")}
+                    {c.tipo === "imagen" ? (
+                      item[c.campo] ? <img src={item[c.campo]} alt="Logo" className="logo-thumb" /> : "-"
+                    ) : c.tipo === "select" ? (
+                      (opciones[c.campo] || {})[item[c.campo]] || item[c.campo]
+                    ) : (
+                      String(item[c.campo] ?? "")
+                    )}
                   </td>
                 ))}
                 <td><span className={`badge ${item.activo === false ? "badge-gris" : "badge-verde"}`}>{item.activo === false ? "Inactivo" : "Activo"}</span></td>
@@ -432,6 +461,7 @@ function Empresas({ perfil }) {
     <MaestroCRUD
       titulo="Empresas" coleccion="empresas" perfil={perfil} permisoAdmin="administrarEmpresas"
       campos={[
+        { campo: "logoBase64", label: "Logo", tipo: "imagen" },
         { campo: "razonSocial", label: "Razón social", requerido: true },
         { campo: "nombreComercial", label: "Nombre comercial" },
         { campo: "ruc", label: "RUC", requerido: true },
@@ -654,15 +684,49 @@ function useContextoSelects() {
 // GENERACIÓN DE PDF (jsPDF)
 // ==========================================================================
 
-function generarPDF(titulo, doc) {
+function generarPDF(titulo, doc, empresa) {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
-  let y = 15;
-  pdf.setFontSize(14);
-  pdf.text(titulo, 14, y); y += 8;
+  const margenIzq = 14;
+  let y = 18;
+
+  // Logo de la empresa emisora, si tiene uno cargado en su registro (Maestros > Empresas)
+  if (empresa && empresa.logoBase64) {
+    try {
+      const formato = empresa.logoBase64.indexOf("image/png") !== -1 ? "PNG" : "JPEG";
+      pdf.addImage(empresa.logoBase64, formato, margenIzq, 10, 26, 18);
+    } catch (e) {
+      console.warn("No se pudo insertar el logo en el PDF:", e);
+    }
+  }
+
+  // Título centrado
+  pdf.setFontSize(15);
+  pdf.setFont(undefined, "bold");
+  pdf.text(titulo, 105, 17, { align: "center" });
+  pdf.setFont(undefined, "normal");
+
+  // Caja con N.° de documento y fecha, arriba a la derecha
+  pdf.setFontSize(9);
+  pdf.rect(150, 9, 46, 14);
+  pdf.text(`N.°: ${doc.numero ?? "-"}`, 152, 14);
+  pdf.text(`Fecha: ${fechaLegible(doc.fecha)}`, 152, 20);
+
+  y = 33;
+  pdf.setDrawColor(180);
+  pdf.line(margenIzq, y, 196, y);
+  y += 6;
+
+  // Datos de la empresa emisora
+  if (empresa) {
+    pdf.setFontSize(9);
+    const linea1 = empresa.razonSocial + (empresa.ruc ? `  ·  RUC: ${empresa.ruc}` : "");
+    pdf.text(linea1, margenIzq, y); y += 5;
+    if (empresa.direccion) { pdf.text(empresa.direccion, margenIzq, y); y += 5; }
+    y += 2;
+  }
+
   pdf.setFontSize(10);
-  pdf.text(`N.º: ${doc.numero ?? "-"}`, 14, y); y += 6;
-  pdf.text(`Fecha: ${fechaLegible(doc.fecha)}`, 14, y); y += 6;
   pdf.text(`Empresa: ${doc.empresaNombre || "-"}`, 14, y); y += 6;
   pdf.text(`Tienda: ${doc.tiendaNombre || "-"}`, 14, y); y += 6;
   pdf.text(`Sector: ${doc.sectorNombre || "-"}`, 14, y); y += 6;
@@ -765,7 +829,7 @@ function Presupuestos({ perfil }) {
                 <td>{formatMoneda(it.total, it.moneda)}</td>
                 <td><span className="badge badge-azul">{ESTADOS_LABELS[it.estado] || it.estado}</span></td>
                 <td className="acciones-celda">
-                  <button className="btn-link" onClick={() => generarPDF("Presupuesto", it)}>PDF</button>
+                  <button className="btn-link" onClick={() => generarPDF("Presupuesto de Proveedor", it, empresas.find((e) => e.id === it.empresaId))}>PDF</button>
                   {puedeAprobar && it.estado === "pendiente" && (
                     <>
                       <button className="btn-link" onClick={() => cambiarEstado(it, "aprobado")}>Aprobar</button>
@@ -915,7 +979,7 @@ function OrdenesPago({ perfil, tipo }) {
                 <td>{formatMoneda(it.total, it.moneda)}</td>
                 <td><span className="badge badge-azul">{ESTADOS_LABELS[it.estado] || it.estado}</span></td>
                 <td className="acciones-celda">
-                  <button className="btn-link" onClick={() => generarPDF(meta.label, it)}>PDF</button>
+                  <button className="btn-link" onClick={() => generarPDF(meta.label, it, empresas.find((e) => e.id === it.empresaId))}>PDF</button>
                   {puedeAprobar && it.estado === "pendiente" && <button className="btn-link" onClick={() => cambiarEstado(it, "aprobado")}>Aprobar</button>}
                   {puedeAprobar && it.estado === "pendiente" && <button className="btn-link" onClick={() => cambiarEstado(it, "rechazado")}>Rechazar</button>}
                   {puedePagar && it.estado === "aprobado" && <button className="btn-link" onClick={() => cambiarEstado(it, "en_tesoreria")}>Enviar a Tesorería</button>}
@@ -1062,7 +1126,7 @@ function OrdenesCobro({ perfil }) {
                 <td>{formatMoneda(it.total, it.moneda)}</td>
                 <td><span className="badge badge-azul">{ESTADOS_LABELS[it.estado] || it.estado}</span></td>
                 <td className="acciones-celda">
-                  <button className="btn-link" onClick={() => generarPDF("Orden de Cobro", it)}>PDF</button>
+                  <button className="btn-link" onClick={() => generarPDF("Orden de Cobro", it, empresas.find((e) => e.id === it.empresaId))}>PDF</button>
                   {puedeAprobar && it.estado === "pendiente" && <button className="btn-link" onClick={() => cambiarEstado(it, "cobrado")}>Marcar cobrado</button>}
                 </td>
               </tr>
@@ -1219,7 +1283,10 @@ function Historial({ perfil }) {
                 <td>{it.numero}</td><td>{it.empresaNombre}</td><td>{formatMoneda(it.total, it.moneda)}</td>
                 <td><span className="badge badge-azul">{ESTADOS_LABELS[it.estado] || it.estado}</span></td>
                 <td>{it.creadoPor}</td>
-                <td><button className="btn-link" onClick={() => generarPDF(tipoDoc, it)}>PDF</button></td>
+                <td><button className="btn-link" onClick={() => generarPDF(
+                  it.tipo && TIPOS_ORDEN[it.tipo] ? TIPOS_ORDEN[it.tipo].label : (tipoDoc === "presupuestos" ? "Presupuesto de Proveedor" : tipoDoc === "ordenesCobro" ? "Orden de Cobro" : "Orden de Pago"),
+                  it, empresas.find((e) => e.id === it.empresaId)
+                )}>PDF</button></td>
               </tr>
             ))}
             {items.length === 0 && <tr><td colSpan="6">Sin resultados.</td></tr>}

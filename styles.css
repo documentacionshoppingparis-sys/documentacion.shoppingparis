@@ -196,6 +196,10 @@ textarea { min-height: 60px; resize: vertical; }
 .modal-acciones { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 
+.campo-imagen { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.logo-preview { max-height: 48px; max-width: 120px; object-fit: contain; border: 1px solid var(--color-borde); border-radius: 4px; padding: 4px; background: #fff; }
+.logo-thumb { max-height: 28px; max-width: 70px; object-fit: contain; }
+
 .detalle-lineas { margin: 10px 0 16px; }
 .total-detalle { text-align: right; font-weight: 600; margin-top: 6px; }
 
