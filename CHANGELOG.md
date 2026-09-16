@@ -94,3 +94,22 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
 ### Agregado
 - La versión del sistema (v{APP_VERSION}) ahora se muestra siempre
   visible en el encabezado del panel lateral, además del pie de página.
+
+## [1.0.6] - 2026-09-16
+
+### Agregado
+- Campo "Vendedor" en el formulario de Presupuesto de Proveedor (dato
+  propio de cada presupuesto, no del maestro de Proveedores, porque
+  puede variar según la compra).
+- PDF dedicado para el Presupuesto de Proveedor (`generarPDFPresupuesto`),
+  que replica el formato en papel de Shopping Paris: logo, caja de N.º y
+  fecha, fila Proveedor/Vendedor, fila Dirección/Celular, tabla de
+  detalle con bordes, fila de observaciones en rojo, "Condiciones del
+  Presupuesto", los dos textos legales fijos del formulario original y
+  la caja de firma "Solicitado por" con el cargo y el nombre del
+  solicitante.
+
+### Nota
+- Los demás documentos (Órdenes de Pago y Orden de Cobro) siguen usando
+  el encabezado genérico por ahora; se irán migrando a su propio formato
+  uno por uno.

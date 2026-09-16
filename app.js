@@ -107,6 +107,19 @@ function fechaLegible(ts) {
   return d.toLocaleString("es-PY");
 }
 
+/** Fecha corta sin hora, formato D/M/AAAA (como en los formularios en papel). */
+function fechaCorta(ts) {
+  if (!ts) return "-";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+}
+
+/** Formato "Gs. 1.000" para PYG, o "USD 1.000" / "BRL 1.000" para otras monedas. */
+function formatGs(valor, moneda) {
+  const n = Number(valor || 0).toLocaleString("es-PY", { minimumFractionDigits: 0 });
+  return moneda === "PYG" || !moneda ? `Gs. ${n}` : `${moneda} ${n}`;
+}
+
 /** Suscripción en tiempo real a una colección, con filtros opcionales. */
 function useColeccion(nombre, { activosSolo = false, where = [], orderBy = null } = {}) {
   const [items, setItems] = useState([]);
@@ -788,9 +801,145 @@ function generarPDF(titulo, doc, empresa) {
   pdf.save(`${titulo.replace(/\s+/g, "_")}_${doc.numero || "s-n"}.pdf`);
 }
 
-// ==========================================================================
-// PRESUPUESTOS
-// ==========================================================================
+/**
+ * PDF específico del Presupuesto de Proveedor, replicando el formato en
+ * papel de Shopping Paris: logo, caja de N.º/fecha, datos de proveedor,
+ * tabla de detalle, observaciones en rojo, condiciones, textos legales
+ * fijos y caja de firma "Solicitado por".
+ */
+function generarPDFPresupuesto(doc, empresa) {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  const ML = 14, MR = 196;
+  const anchoUtil = MR - ML;
+
+  // --- Encabezado: logo, título, caja de N.º y fecha ---
+  if (empresa && empresa.logoBase64) {
+    try {
+      const formato = empresa.logoBase64.indexOf("image/png") !== -1 ? "PNG" : "JPEG";
+      pdf.addImage(empresa.logoBase64, formato, ML, 9, 32, 26);
+    } catch (e) { console.warn("No se pudo insertar el logo:", e); }
+  }
+  pdf.setFont(undefined, "bold");
+  pdf.setFontSize(17);
+  pdf.text("PRESUPUESTO DE", 108, 20, { align: "center" });
+  pdf.text("PROVEEDOR", 108, 29, { align: "center" });
+
+  pdf.rect(150, 9, 46, 19);
+  pdf.line(150, 18.5, 196, 18.5);
+  pdf.line(174, 9, 174, 28);
+  pdf.setFontSize(9);
+  pdf.text("OPPRH N.°:", 152, 15);
+  pdf.text("FECHA:", 152, 24.5);
+  pdf.setFont(undefined, "normal");
+  pdf.text(String(doc.numero ?? "-"), 176, 15);
+  pdf.text(fechaCorta(doc.fecha), 176, 24.5);
+
+  let y = 42;
+  pdf.line(ML, y, MR, y);
+  y += 6;
+
+  // --- Proveedor / Vendedor / Dirección / Celular ---
+  pdf.setFontSize(9.5);
+  pdf.setFont(undefined, "bold"); pdf.text("Proveedor:", ML, y);
+  pdf.setFont(undefined, "normal"); pdf.text(doc.proveedorNombre || "-", ML + 22, y);
+  pdf.setFont(undefined, "bold"); pdf.text("Vendedor:", 112, y);
+  pdf.setFont(undefined, "normal"); pdf.text(doc.vendedor || "-", 112 + 20, y);
+  y += 6;
+  pdf.setFont(undefined, "bold"); pdf.text("Dirección:", ML, y);
+  pdf.setFont(undefined, "normal"); pdf.text(doc.proveedorDireccion || "-", ML + 22, y);
+  pdf.setFont(undefined, "bold"); pdf.text("Celular:", 112, y);
+  pdf.setFont(undefined, "normal"); pdf.text(doc.proveedorTelefono || "-", 112 + 20, y);
+  y += 5;
+  pdf.line(ML, y, MR, y);
+  y += 5;
+
+  // --- Tabla de detalle ---
+  const colCant = 118, colPU = 142, colPT = 168;
+  const alto = 7;
+  pdf.setFillColor(235, 235, 235);
+  pdf.rect(ML, y, anchoUtil, alto, "F");
+  pdf.rect(ML, y, anchoUtil, alto);
+  [colCant, colPU, colPT].forEach((x) => pdf.line(x, y, x, y + alto));
+  pdf.setFont(undefined, "bold");
+  pdf.setFontSize(8.5);
+  pdf.text("DESCRIPCIÓN", ML + 2, y + 4.5);
+  pdf.text("CANTIDAD", colCant + (colPU - colCant) / 2, y + 4.5, { align: "center" });
+  pdf.text("PRECIO UNIT.", colPU + (colPT - colPU) / 2, y + 4.5, { align: "center" });
+  pdf.text("PRECIO TOTAL", colPT + (MR - colPT) / 2, y + 4.5, { align: "center" });
+  y += alto;
+
+  pdf.setFont(undefined, "normal");
+  const detalle = Array.isArray(doc.detalle) ? doc.detalle : [];
+  detalle.forEach((l) => {
+    const subtotal = (Number(l.cantidad) || 0) * (Number(l.precioUnitario) || 0);
+    pdf.rect(ML, y, anchoUtil, alto);
+    [colCant, colPU, colPT].forEach((x) => pdf.line(x, y, x, y + alto));
+    pdf.text(String(l.descripcion || ""), ML + 2, y + 4.5);
+    pdf.text(String(l.cantidad || 0), colCant + (colPU - colCant) / 2, y + 4.5, { align: "center" });
+    pdf.text(formatGs(l.precioUnitario, doc.moneda), colPU + (colPT - colPU) / 2, y + 4.5, { align: "center" });
+    pdf.text(formatGs(subtotal, doc.moneda), colPT + (MR - colPT) / 2, y + 4.5, { align: "center" });
+    y += alto;
+  });
+
+  // Fila de total
+  pdf.rect(ML, y, anchoUtil, alto);
+  pdf.line(colPT, y, colPT, y + alto);
+  pdf.setFont(undefined, "bold");
+  pdf.text(`TOTAL ${doc.moneda === "PYG" || !doc.moneda ? "Gs" : doc.moneda}`, colPT - 4, y + 4.5, { align: "right" });
+  pdf.text(formatGs(doc.total, doc.moneda), colPT + (MR - colPT) / 2, y + 4.5, { align: "center" });
+  y += alto + 3;
+
+  // --- Observaciones (en rojo, como en el original) ---
+  const altoObs = 13;
+  pdf.setFont(undefined, "bold");
+  pdf.setFontSize(9);
+  pdf.rect(ML, y, anchoUtil, altoObs);
+  pdf.text("OBS.:", ML + 2, y + 5);
+  pdf.setTextColor(200, 0, 0);
+  pdf.setFont(undefined, "bold");
+  const obsLineas = pdf.splitTextToSize(doc.observaciones || "-", anchoUtil - 20);
+  pdf.text(obsLineas, ML + 18, y + 5);
+  pdf.setTextColor(0, 0, 0);
+  pdf.setFont(undefined, "normal");
+  y += altoObs + 8;
+
+  // --- Condiciones del presupuesto ---
+  pdf.setFont(undefined, "bold");
+  pdf.setFontSize(10);
+  pdf.text("Condiciones del Presupuesto:", ML, y);
+  y += 6;
+  pdf.setFont(undefined, "normal");
+  pdf.setFontSize(9.5);
+  pdf.text(doc.condiciones || "-", ML, y);
+  y += 9;
+
+  // --- Textos legales fijos (idénticos al formulario en papel) ---
+  pdf.setFontSize(8.5);
+  const legal1 = "La información de este presupuesto no es una factura, es solo una estimación de costos de los servicios y/o materiales descritos más arriba, se aclara que esta estimación no es contractual.";
+  const legal2 = "Se deben de adjuntar los soportes de los Screenshot enviados por el proveedor y demás soportes que se tengan.";
+  const l1 = pdf.splitTextToSize(legal1, anchoUtil);
+  pdf.text(l1, ML, y); y += l1.length * 4 + 3;
+  const l2 = pdf.splitTextToSize(legal2, anchoUtil);
+  pdf.text(l2, ML, y);
+
+  // --- Caja de firma "Solicitado por" (abajo a la derecha) ---
+  const cajaAncho = 62, cajaAlto = 34, cajaX = MR - cajaAncho, cajaY = 255;
+  pdf.rect(cajaX, cajaY, cajaAncho, cajaAlto);
+  pdf.line(cajaX + 8, cajaY, cajaX + 8, cajaY + cajaAlto);
+  pdf.setFontSize(7);
+  pdf.text("SOLICITADO POR:", cajaX + 5.5, cajaY + cajaAlto - 3, { angle: 90 });
+  pdf.setFont(undefined, "bold");
+  pdf.setFontSize(9);
+  const cargoSolicitante = doc.solicitadoPor ? (doc.solicitadoPor.cargo || "-") : "-";
+  pdf.text(cargoSolicitante, cajaX + 8 + (cajaAncho - 8) / 2, cajaY + 8, { align: "center" });
+  pdf.setFont(undefined, "normal");
+  pdf.line(cajaX + 12, cajaY + cajaAlto - 8, cajaX + cajaAncho - 4, cajaY + cajaAlto - 8);
+  const nombreSolicitante = doc.solicitadoPor ? doc.solicitadoPor.nombre : "-";
+  pdf.text(nombreSolicitante, cajaX + 8 + (cajaAncho - 8) / 2, cajaY + cajaAlto - 4, { align: "center" });
+
+  pdf.save(`Presupuesto_${doc.numero || "s-n"}.pdf`);
+}
 
 function Presupuestos({ perfil }) {
   const { empresas, tiendas, sectores, personas, proveedores } = useContextoSelects();
@@ -808,7 +957,7 @@ function Presupuestos({ perfil }) {
     setReservando(false);
     setForm({
       numero,
-      empresaId: "", tiendaId: "", sectorId: "", proveedorId: "", solicitanteId: "",
+      empresaId: "", tiendaId: "", sectorId: "", proveedorId: "", vendedor: "", solicitanteId: "",
       moneda: "PYG", condiciones: "", formaPago: "", prioridad: "normal", observaciones: "",
       detalle: [{ descripcion: "", cantidad: 1, precioUnitario: 0 }],
     });
@@ -830,7 +979,11 @@ function Presupuestos({ perfil }) {
       tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
       sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
       proveedorId: form.proveedorId || null, proveedorNombre: proveedor ? proveedor.razonSocial : null,
-      // Copia histórica del solicitante (sección 7): no depende del maestro de personas a futuro.
+      // Copia histórica de los datos del proveedor y del vendedor (sección 7):
+      // el PDF no debe depender de que el maestro de proveedores no cambie después.
+      proveedorDireccion: proveedor ? proveedor.direccion || null : null,
+      proveedorTelefono: proveedor ? proveedor.telefono || null : null,
+      vendedor: form.vendedor || null,
       solicitadoPor: solicitante ? { personaId: solicitante.id, nombre: `${solicitante.nombre} ${solicitante.apellido}`, cargo: solicitante.cargo || null, sector: sector ? sector.nombre : null } : null,
       moneda: form.moneda, detalle: form.detalle, total,
       condiciones: form.condiciones, formaPago: form.formaPago, prioridad: form.prioridad,
@@ -864,7 +1017,7 @@ function Presupuestos({ perfil }) {
                 <td>{formatMoneda(it.total, it.moneda)}</td>
                 <td><span className="badge badge-azul">{ESTADOS_LABELS[it.estado] || it.estado}</span></td>
                 <td className="acciones-celda">
-                  <button className="btn-link" onClick={() => generarPDF("Presupuesto de Proveedor", it, empresas.find((e) => e.id === it.empresaId))}>PDF</button>
+                  <button className="btn-link" onClick={() => generarPDFPresupuesto(it, empresas.find((e) => e.id === it.empresaId))}>PDF</button>
                   {puedeAprobar && it.estado === "pendiente" && (
                     <>
                       <button className="btn-link" onClick={() => cambiarEstado(it, "aprobado")}>Aprobar</button>
@@ -907,6 +1060,9 @@ function Presupuestos({ perfil }) {
                   <option value="">Seleccionar...</option>
                   {proveedores.map((p) => <option key={p.id} value={p.id}>{p.razonSocial}</option>)}
                 </select>
+              </div>
+              <div className="campo-form"><label>Vendedor</label>
+                <input value={form.vendedor} onChange={(e) => setForm({ ...form, vendedor: e.target.value })} placeholder="Nombre del vendedor del proveedor" />
               </div>
               <div className="campo-form"><label>Solicitante</label>
                 <select value={form.solicitanteId} onChange={(e) => setForm({ ...form, solicitanteId: e.target.value })}>
@@ -1330,10 +1486,12 @@ function Historial({ perfil }) {
                 <td>{it.numero}</td><td>{it.empresaNombre}</td><td>{formatMoneda(it.total, it.moneda)}</td>
                 <td><span className="badge badge-azul">{ESTADOS_LABELS[it.estado] || it.estado}</span></td>
                 <td>{it.creadoPor}</td>
-                <td><button className="btn-link" onClick={() => generarPDF(
-                  it.tipo && TIPOS_ORDEN[it.tipo] ? TIPOS_ORDEN[it.tipo].label : (tipoDoc === "presupuestos" ? "Presupuesto de Proveedor" : tipoDoc === "ordenesCobro" ? "Orden de Cobro" : "Orden de Pago"),
-                  it, empresas.find((e) => e.id === it.empresaId)
-                )}>PDF</button></td>
+                <td><button className="btn-link" onClick={() => {
+                  const empresa = empresas.find((e) => e.id === it.empresaId);
+                  if (tipoDoc === "presupuestos") { generarPDFPresupuesto(it, empresa); return; }
+                  const titulo = it.tipo && TIPOS_ORDEN[it.tipo] ? TIPOS_ORDEN[it.tipo].label : (tipoDoc === "ordenesCobro" ? "Orden de Cobro" : "Orden de Pago");
+                  generarPDF(titulo, it, empresa);
+                }}>PDF</button></td>
               </tr>
             ))}
             {items.length === 0 && <tr><td colSpan="6">Sin resultados.</td></tr>}
