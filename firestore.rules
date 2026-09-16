@@ -1,39 +1,118 @@
 rules_version = '2';
+
+// Reglas de seguridad del Sistema Administrativo Multiempresa.
+// Esta es la fuente de seguridad real: ocultar un botón en React
+// NO reemplaza estas reglas. Nunca usar `allow read, write: if true;` en producción.
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn(){ return request.auth != null; }
-    function userDoc(){ return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data; }
-    function active(){ return signedIn() && userDoc().activo == true; }
-    function role(){ return active() ? userDoc().rol : null; }
-    function admin(){ return role() == 'admin'; }
-    function operator(){ return role() == 'operador'; }
-    function approver(){ return role() == 'aprobador'; }
-    function treasury(){ return role() == 'tesoreria'; }
-    function canRead(){ return active(); }
-    function canCreateDocument(){ return admin() || operator(); }
 
+    // ---------- Helpers ----------
+
+    function estaAutenticado() {
+      return request.auth != null;
+    }
+
+    function perfilUsuario() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function usuarioActivo() {
+      return estaAutenticado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && perfilUsuario().activo == true;
+    }
+
+    function tieneRol(roles) {
+      return usuarioActivo() && perfilUsuario().rol in roles;
+    }
+
+    function esAdmin() {
+      return tieneRol(['admin']);
+    }
+
+    // ---------- Usuarios ----------
+    // Un usuario puede leer su propio documento; solo un admin administra usuarios.
     match /usuarios/{uid} {
-      allow read: if active() && (request.auth.uid == uid || admin());
-      allow create, update: if admin();
+      allow read: if usuarioActivo() && (request.auth.uid == uid || esAdmin());
+      allow create, update: if esAdmin();
+      allow delete: if false; // baja lógica únicamente (activo: false)
+    }
+
+    // ---------- Maestros ----------
+    // Lectura: cualquier usuario activo. Escritura: roles administradores del recurso.
+    match /empresas/{id} {
+      allow read: if usuarioActivo();
+      allow create, update: if esAdmin();
       allow delete: if false;
     }
 
-    match /{collection}/{id} {
-      allow read: if canRead() && collection in ['empresas','tiendas','sectores','personas','responsables','proveedores'];
-      allow create, update: if admin() && collection in ['empresas','tiendas','sectores','personas','responsables','proveedores'];
+    match /tiendas/{id} {
+      allow read: if usuarioActivo();
+      allow create, update: if esAdmin();
       allow delete: if false;
     }
 
-    match /documentos/{id} {
-      allow read: if canRead();
-      allow create: if canCreateDocument();
+    match /sectores/{id} {
+      allow read: if usuarioActivo();
+      allow create, update: if esAdmin();
+      allow delete: if false;
+    }
+
+    match /personas/{id} {
+      allow read: if usuarioActivo();
+      allow create, update: if esAdmin();
+      allow delete: if false;
+    }
+
+    match /proveedores/{id} {
+      allow read: if usuarioActivo();
+      allow create, update: if tieneRol(['admin', 'solicitante']);
+      allow delete: if false;
+    }
+
+    // ---------- Contadores ----------
+    // Solo lectura/escritura por usuarios activos autorizados a crear documentos;
+    // la atomicidad se garantiza vía transacción en el cliente.
+    match /contadores/{id} {
+      allow read: if usuarioActivo();
+      allow write: if tieneRol(['admin', 'solicitante']);
+    }
+
+    // ---------- Documentos transaccionales ----------
+    // Creación: solicitantes/admin. Actualización de estado: aprobadores/tesorería/admin.
+    // Nunca se permite delete: las anulaciones se registran como cambio de estado.
+
+    match /presupuestos/{id} {
+      allow read: if usuarioActivo();
+      allow create: if tieneRol(['admin', 'solicitante']);
+      allow update: if tieneRol(['admin', 'aprobador', 'solicitante']);
+      allow delete: if false;
+    }
+
+    match /ordenesPago/{id} {
+      allow read: if usuarioActivo();
+      allow create: if tieneRol(['admin', 'solicitante']);
+      allow update: if tieneRol(['admin', 'aprobador', 'tesoreria']);
+      allow delete: if false;
+    }
+
+    match /ordenesCobro/{id} {
+      allow read: if usuarioActivo();
+      allow create: if tieneRol(['admin', 'solicitante']);
+      allow update: if tieneRol(['admin', 'aprobador', 'tesoreria']);
+      allow delete: if false;
+    }
+
+    // ---------- Auditoría ----------
+    // Solo lectura para usuarios activos. La escritura se realiza desde la
+    // aplicación en cada acción relevante; nunca se edita ni se borra.
+    match /auditoria/{id} {
+      allow read: if usuarioActivo();
+      allow create: if usuarioActivo();
       allow update, delete: if false;
     }
 
-    match /contadores/{id} {
-      allow read: if active();
-      allow create, update: if canCreateDocument();
-      allow delete: if false;
-    }
+    // Cualquier otra colección no contemplada queda denegada por defecto.
   }
 }

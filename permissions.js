@@ -1,21 +1,55 @@
+/**
+ * permissions.js
+ * Matriz de roles y permisos utilizada por la interfaz (UX/visibilidad).
+ *
+ * IMPORTANTE: esta matriz controla qué ve y qué puede hacer el usuario en pantalla,
+ * pero NO reemplaza la seguridad real, que está implementada en firestore.rules.
+ * Cualquier permiso definido aquí debe tener su equivalente verificado en las reglas.
+ */
+
 const ROLES = {
-  ADMIN: 'admin',
-  OPERADOR: 'operador',
-  APROBADOR: 'aprobador',
-  TESORERIA: 'tesoreria',
-  CONSULTA: 'consulta'
+  ADMIN: "admin",
+  SOLICITANTE: "solicitante",
+  APROBADOR: "aprobador",
+  TESORERIA: "tesoreria",
+  AUDITOR: "auditor",
 };
 
-const PERMISSIONS = {
-  admin: ['*'],
-  operador: ['dashboard.read','masters.read','documents.read','documents.create','pdf.generate'],
-  aprobador: ['dashboard.read','masters.read','documents.read','documents.approve','pdf.generate'],
-  tesoreria: ['dashboard.read','masters.read','documents.read','documents.receive','pdf.generate'],
-  consulta: ['dashboard.read','masters.read','documents.read','pdf.generate']
+const ROLES_LABELS = {
+  [ROLES.ADMIN]: "Administrador",
+  [ROLES.SOLICITANTE]: "Solicitante",
+  [ROLES.APROBADOR]: "Aprobador",
+  [ROLES.TESORERIA]: "Tesorería",
+  [ROLES.AUDITOR]: "Consulta / Auditor",
 };
 
-function hasPermission(user, permission) {
-  if (!user || user.activo === false) return false;
-  const permissions = PERMISSIONS[user.rol] || [];
-  return permissions.includes('*') || permissions.includes(permission);
+// Matriz permiso -> roles habilitados.
+// Se puede ampliar sin modificar el resto de la aplicación.
+const PERMISOS = {
+  verEmpresas: [ROLES.ADMIN, ROLES.SOLICITANTE, ROLES.APROBADOR, ROLES.TESORERIA, ROLES.AUDITOR],
+  administrarEmpresas: [ROLES.ADMIN],
+  administrarTiendas: [ROLES.ADMIN],
+  administrarSectores: [ROLES.ADMIN],
+  administrarProveedores: [ROLES.ADMIN, ROLES.SOLICITANTE],
+  administrarPersonas: [ROLES.ADMIN],
+  administrarResponsables: [ROLES.ADMIN],
+  crearPresupuestos: [ROLES.ADMIN, ROLES.SOLICITANTE],
+  aprobarPresupuestos: [ROLES.ADMIN, ROLES.APROBADOR],
+  crearOrdenes: [ROLES.ADMIN, ROLES.SOLICITANTE],
+  aprobarOrdenes: [ROLES.ADMIN, ROLES.APROBADOR],
+  procesarPagos: [ROLES.ADMIN, ROLES.TESORERIA],
+  generarPDF: [ROLES.ADMIN, ROLES.SOLICITANTE, ROLES.APROBADOR, ROLES.TESORERIA, ROLES.AUDITOR],
+  consultarHistorial: [ROLES.ADMIN, ROLES.SOLICITANTE, ROLES.APROBADOR, ROLES.TESORERIA, ROLES.AUDITOR],
+  administrarUsuarios: [ROLES.ADMIN],
+};
+
+/**
+ * Determina si un rol tiene un permiso determinado.
+ * @param {string} rol
+ * @param {string} permiso - clave de PERMISOS
+ * @returns {boolean}
+ */
+function hasPermission(rol, permiso) {
+  if (!rol || !PERMISOS[permiso]) return false;
+  return PERMISOS[permiso].includes(rol);
 }
