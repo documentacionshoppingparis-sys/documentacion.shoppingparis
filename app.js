@@ -48,9 +48,13 @@ const MONEDAS = ["PYG", "USD", "BRL"];
 const TIPOS_ORDEN = {
   productos: { label: "Orden de Pago - Productos", contador: "ordenPagoProductos" },
   servicios: { label: "Orden de Pago - Servicios", contador: "ordenPagoServicios" },
-  rrhh: { label: "Orden de Pago - Recursos Humanos", contador: "ordenPagoRRHH" },
-  funcionarios: { label: "Orden de Pago - Funcionarios", contador: "ordenPagoFuncionarios" },
+  // Un solo tipo para RR.HH.: funcionarios, comisiones, incentivos y bonificaciones
+  // se distinguen con el campo "concepto", sin crear un tipo documental por cada uno
+  // (sección 13 del documento maestro).
+  rrhh: { label: "Orden de Pago - RR.HH.", contador: "ordenPagoRRHH" },
 };
+
+const CONCEPTOS_RRHH = ["Pago a funcionario", "Comisión", "Incentivo", "Bonificación", "Otro"];
 
 const SECTORES_INICIALES = [
   "Operacional", "Servicios Generales", "Electromecánica", "Seguridad",
@@ -223,7 +227,6 @@ const MENU = [
   { vista: "orden_productos", label: "Orden de Pago - Productos", permiso: "crearOrdenes" },
   { vista: "orden_servicios", label: "Orden de Pago - Servicios", permiso: "crearOrdenes" },
   { vista: "orden_rrhh", label: "Orden de Pago - RR.HH.", permiso: "crearOrdenes" },
-  { vista: "orden_funcionarios", label: "Orden de Pago - Funcionarios", permiso: "crearOrdenes" },
   { vista: "ordenes_cobro", label: "Órdenes de Cobro", permiso: "crearOrdenes" },
   { grupo: "Maestros" },
   { vista: "empresas", label: "Empresas", permiso: "verEmpresas" },
@@ -973,9 +976,12 @@ function OrdenesPago({ perfil, tipo }) {
                   {MONEDAS.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
-              {(tipo === "rrhh" || tipo === "funcionarios") && (
-                <div className="campo-form"><label>Concepto (haberes, comisión, incentivo, etc.)</label>
-                  <input value={form.concepto} onChange={(e) => setForm({ ...form, concepto: e.target.value })} />
+              {tipo === "rrhh" && (
+                <div className="campo-form"><label>Concepto *</label>
+                  <select required value={form.concepto} onChange={(e) => setForm({ ...form, concepto: e.target.value })}>
+                    <option value="">Seleccionar...</option>
+                    {CONCEPTOS_RRHH.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
               )}
               <div className="campo-form"><label>Condición de pago</label><input value={form.condicionPago} onChange={(e) => setForm({ ...form, condicionPago: e.target.value })} /></div>
@@ -1238,7 +1244,6 @@ function AppAutenticada({ perfil, logout }) {
       case "orden_productos": return <OrdenesPago perfil={perfil} tipo="productos" />;
       case "orden_servicios": return <OrdenesPago perfil={perfil} tipo="servicios" />;
       case "orden_rrhh": return <OrdenesPago perfil={perfil} tipo="rrhh" />;
-      case "orden_funcionarios": return <OrdenesPago perfil={perfil} tipo="funcionarios" />;
       case "ordenes_cobro": return <OrdenesCobro perfil={perfil} />;
       case "empresas": return <Empresas perfil={perfil} />;
       case "tiendas": return <Tiendas perfil={perfil} />;
