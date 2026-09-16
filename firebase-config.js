@@ -7,14 +7,15 @@
  * nunca ocultando esta configuración.
  */
 
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "REEMPLAZAR_CON_TU_API_KEY", // Ver SETUP_FIREBASE.md para obtenerla desde la consola de Firebase
+  apiKey: "AIzaSyCrmF2oDA4ZQeSqvkuHcRDOQUJQpAu28Fs",
   authDomain: "docshoppingparis.firebaseapp.com",
   projectId: "docshoppingparis",
   storageBucket: "docshoppingparis.firebasestorage.app",
   messagingSenderId: "401673194386",
   appId: "1:401673194386:web:fad2464f43437441884f4b",
-  measurementId: "G-HVJ549FXT2",
+  measurementId: "G-HVJ549FXT2"
 };
 
 // Instancia principal de la aplicación (sesión del usuario logueado)
