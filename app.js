@@ -725,6 +725,33 @@ function useContextoSelects() {
 // GENERACIÓN DE PDF (jsPDF)
 // ==========================================================================
 
+/**
+ * Devuelve el ancho y alto reales de una imagen (base64), para poder
+ * insertarla en el PDF respetando su proporción y que no salga distorsionada.
+ */
+function obtenerDimensionesImagen(base64) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve(null);
+    img.src = base64;
+  });
+}
+
+/**
+ * Calcula ancho/alto y posición para que una imagen entre dentro de una caja
+ * (maxW x maxH) sin deformarse, centrada dentro de esa caja.
+ */
+function ajustarImagenACaja(dimensiones, x, y, maxW, maxH) {
+  let w = maxW, h = maxH;
+  if (dimensiones && dimensiones.width && dimensiones.height) {
+    const ratio = dimensiones.width / dimensiones.height;
+    if (maxW / maxH > ratio) { h = maxH; w = maxH * ratio; }
+    else { w = maxW; h = maxW / ratio; }
+  }
+  return { x: x + (maxW - w) / 2, y: y + (maxH - h) / 2, w, h };
+}
+
 function generarPDF(titulo, doc, empresa) {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
@@ -814,16 +841,20 @@ function generarPDFPresupuesto(doc, empresa, tienda) {
   const ML = 14, MR = 196;
   const anchoUtil = MR - ML;
 
-  // --- Encabezado: logo, título, caja de N.º y fecha ---
-  // El logo de la tienda/sucursal tiene prioridad; si no tiene uno propio
-  // cargado, se usa el logo de la empresa.
-  const logo = (tienda && tienda.logoBase64) || (empresa && empresa.logoBase64);
-  if (logo) {
-    try {
-      const formato = logo.indexOf("image/png") !== -1 ? "PNG" : "JPEG";
-      pdf.addImage(logo, formato, ML, 9, 32, 26);
-    } catch (e) { console.warn("No se pudo insertar el logo:", e); }
-  }
+  return (async () => {
+    // --- Encabezado: logo, título, caja de N.º y fecha ---
+    // El logo de la tienda/sucursal tiene prioridad; si no tiene uno propio
+    // cargado, se usa el logo de la empresa. Se respeta su proporción real
+    // para que no salga deformado.
+    const logo = (tienda && tienda.logoBase64) || (empresa && empresa.logoBase64);
+    if (logo) {
+      try {
+        const dimensiones = await obtenerDimensionesImagen(logo);
+        const caja = ajustarImagenACaja(dimensiones, ML, 9, 32, 26);
+        const formato = logo.indexOf("image/png") !== -1 ? "PNG" : "JPEG";
+        pdf.addImage(logo, formato, caja.x, caja.y, caja.w, caja.h);
+      } catch (e) { console.warn("No se pudo insertar el logo:", e); }
+    }
   pdf.setFont(undefined, "bold");
   pdf.setFontSize(17);
   pdf.text("PRESUPUESTO DE", 108, 20, { align: "center" });
@@ -943,6 +974,7 @@ function generarPDFPresupuesto(doc, empresa, tienda) {
   pdf.text(nombreSolicitante, cajaX + 8 + (cajaAncho - 8) / 2, cajaY + cajaAlto - 4, { align: "center" });
 
   pdf.save(`Presupuesto_${doc.numero || "s-n"}.pdf`);
+  })();
 }
 
 function Presupuestos({ perfil }) {
@@ -1013,11 +1045,11 @@ function Presupuestos({ perfil }) {
       </div>
       {cargando ? <p>Cargando...</p> : (
         <table className="tabla">
-          <thead><tr><th>N.º</th><th>Empresa</th><th>Proveedor</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>N.º</th><th>Empresa</th><th>Tienda</th><th>Proveedor</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead>
           <tbody>
             {items.map((it) => (
               <tr key={it.id}>
-                <td>{it.numero}</td><td>{it.empresaNombre}</td><td>{it.proveedorNombre || "-"}</td>
+                <td>{it.numero}</td><td>{it.empresaNombre}</td><td>{it.tiendaNombre || "-"}</td><td>{it.proveedorNombre || "-"}</td>
                 <td>{formatMoneda(it.total, it.moneda)}</td>
                 <td><span className="badge badge-azul">{ESTADOS_LABELS[it.estado] || it.estado}</span></td>
                 <td className="acciones-celda">
@@ -1031,7 +1063,7 @@ function Presupuestos({ perfil }) {
                 </td>
               </tr>
             ))}
-            {items.length === 0 && <tr><td colSpan="6">Sin registros.</td></tr>}
+            {items.length === 0 && <tr><td colSpan="7">Sin registros.</td></tr>}
           </tbody>
         </table>
       )}

@@ -114,6 +114,22 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
   el encabezado genérico por ahora; se irán migrando a su propio formato
   uno por uno.
 
+## [1.0.8] - 2026-09-16
+
+### Corregido
+- El logo (de empresa o tienda) salía deformado en el PDF del
+  Presupuesto porque se insertaba forzado a un tamaño fijo. Ahora se
+  calcula la proporción real de la imagen antes de insertarla, para que
+  se vea sin estirarse ni achatarse.
+- Se corrige el versionado: la constante `APP_VERSION` (visible en el
+  panel lateral) no se venía actualizando en los últimos cambios; queda
+  sincronizada con este changelog.
+
+### Agregado
+- Columna "Tienda" en el listado de Presupuestos de Proveedor, para
+  poder ver de un vistazo qué sucursal registró cada uno (antes solo se
+  veía la empresa).
+
 ## [1.0.7] - 2026-09-16
 
 ### Agregado
