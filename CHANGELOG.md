@@ -185,3 +185,12 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
 - Se revierte el número de documento a asignarse recién **al guardar**
   (no al abrir el formulario "Nuevo"), para no consumir números de
   talonario cuando se abre y se cancela sin guardar.
+
+## [1.1.2] - 2026-09-16
+
+### Agregado
+- Botón "Ver" en el listado de Órdenes de Pago (Productos, Servicios,
+  RR.HH.), junto a PDF, Aprobar, Rechazar: abre el mismo tipo de vista de
+  detalle de solo lectura que ya tenían los Presupuestos, con todos los
+  datos de la orden y su detalle línea por línea, y un botón para generar
+  el PDF desde ahí.

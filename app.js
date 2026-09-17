@@ -1210,6 +1210,7 @@ function OrdenesPago({ perfil, tipo }) {
   const { items: itemsSinOrdenar, cargando } = useColeccion("ordenesPago", { where: [["tipo", "==", tipo]] });
   const items = ordenarPorNumeroDesc(itemsSinOrdenar);
   const [form, setForm] = useState(null);
+  const [viendo, setViendo] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [errorGuardado, setErrorGuardado] = useState("");
   const [importando, setImportando] = useState(false);
@@ -1339,6 +1340,7 @@ function OrdenesPago({ perfil, tipo }) {
                 <td>{formatMoneda(it.total, it.moneda)}</td>
                 <td><span className="badge badge-azul">{ESTADOS_LABELS[it.estado] || it.estado}</span></td>
                 <td className="acciones-celda">
+                  <button className="btn-link" onClick={() => setViendo(it)}>Ver</button>
                   <button className="btn-link" onClick={() => generarPDF(meta.label, it, empresas.find((e) => e.id === it.empresaId))}>PDF</button>
                   {puedeAprobar && it.estado === "pendiente" && <button className="btn-link" onClick={() => cambiarEstado(it, "aprobado")}>Aprobar</button>}
                   {puedeAprobar && it.estado === "pendiente" && <button className="btn-link" onClick={() => cambiarEstado(it, "rechazado")}>Rechazar</button>}
@@ -1430,6 +1432,50 @@ function OrdenesPago({ perfil, tipo }) {
               <button type="submit" disabled={guardando}>{guardando ? "Guardando..." : "Guardar"}</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {viendo && (
+        <div className="modal-fondo" onClick={() => setViendo(null)}>
+          <div className="modal-caja modal-grande" onClick={(e) => e.stopPropagation()}>
+            <h3>{meta.label} <span className="numero-reservado">N.º {viendo.numero}</span></h3>
+            <div className="detalle-vista">
+              <div className="grid-2">
+                <p><strong>Fecha:</strong> {fechaLegible(viendo.fecha)}</p>
+                <p><strong>Estado:</strong> <span className="badge badge-azul">{ESTADOS_LABELS[viendo.estado] || viendo.estado}</span></p>
+                <p><strong>Empresa:</strong> {viendo.empresaNombre || "-"}</p>
+                <p><strong>Tienda:</strong> {viendo.tiendaNombre || "-"}</p>
+                <p><strong>Sector:</strong> {viendo.sectorNombre || "-"}</p>
+                {viendo.proveedorNombre && <p><strong>Proveedor:</strong> {viendo.proveedorNombre}</p>}
+                {viendo.concepto && <p><strong>Concepto:</strong> {viendo.concepto}</p>}
+                <p><strong>Presupuesto relacionado:</strong> {viendo.presupuestoNumero ? `N.º ${viendo.presupuestoNumero}` : "Ninguno"}</p>
+                <p><strong>Solicitante:</strong> {viendo.solicitadoPor ? `${viendo.solicitadoPor.nombre} (${viendo.solicitadoPor.cargo || "-"})` : "-"}</p>
+                <p><strong>Condición de pago:</strong> {viendo.condicionPago || "-"}</p>
+                <p><strong>Facturas relacionadas:</strong> {viendo.facturas || "-"}</p>
+              </div>
+              <p><strong>Observaciones:</strong> {viendo.observaciones || "-"}</p>
+              <label>Detalle</label>
+              <table className="tabla tabla-compacta">
+                <thead><tr><th>Descripción</th><th>Cant.</th><th>Precio unit.</th><th>Subtotal</th></tr></thead>
+                <tbody>
+                  {(viendo.detalle || []).map((l, i) => (
+                    <tr key={i}>
+                      <td>{l.descripcion}</td>
+                      <td>{l.cantidad}</td>
+                      <td>{formatGs(l.precioUnitario, viendo.moneda)}</td>
+                      <td>{formatGs((Number(l.cantidad) || 0) * (Number(l.precioUnitario) || 0), viendo.moneda)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="total-detalle">Total: {formatMoneda(viendo.total, viendo.moneda)}</p>
+              <p className="nota">Creado por {viendo.creadoPor || "-"} el {fechaLegible(viendo.fechaCreacion)}</p>
+            </div>
+            <div className="modal-acciones">
+              <button type="button" className="btn-secundario" onClick={() => setViendo(null)}>Cerrar</button>
+              <button type="button" onClick={() => generarPDF(meta.label, viendo, empresas.find((e) => e.id === viendo.empresaId))}>Generar PDF</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
