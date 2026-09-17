@@ -8,7 +8,7 @@
  */
 
 const firebaseConfig = {
-  apiKey: "REEMPLAZAR_CON_TU_API_KEY", // Ver SETUP_FIREBASE.md para obtenerla desde la consola de Firebase
+  apiKey: "AIzaSyCrmF2oDA4ZQeSqvkuHcRDOQUJQpAu28Fs",
   authDomain: "docshoppingparis.firebaseapp.com",
   projectId: "docshoppingparis",
   storageBucket: "docshoppingparis.firebasestorage.app",
