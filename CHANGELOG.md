@@ -139,6 +139,20 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
   vendedor, solicitante, condiciones, observaciones, detalle de líneas
   y total), con un botón para generar el PDF desde ahí mismo.
 
+## [1.1.0] - 2026-09-16
+
+### Agregado
+- `index.html`: se agrega SheetJS (lectura de archivos Excel en el
+  navegador) vía CDN.
+- En "Nueva Orden de Pago - RR.HH.", cuando el Concepto elegido es
+  "Comisión", aparece un botón "Importar Excel" que carga una planilla
+  (.xlsx) con el formato: N°, NRODOC, APELLIDOS, NOMBRES, CARGO, FECHA
+  INGRESO, TIPO COMP, CENTRO DE COSTO, SUCURSAL, CM. Cada fila se
+  convierte en una línea del detalle (funcionario + documento + cargo +
+  sucursal, con el importe de la columna CM), reemplazando las líneas
+  que hubiera cargadas manualmente. Si el archivo no tiene el formato
+  esperado, se muestra un aviso en vez de fallar en silencio.
+
 ## [1.0.7] - 2026-09-16
 
 ### Agregado

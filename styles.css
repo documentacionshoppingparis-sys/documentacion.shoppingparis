@@ -40,6 +40,24 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 }
 .btn-secundario:hover { background: #f0f2f5; }
 
+.btn-importar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #fff;
+  color: var(--color-primario);
+  border: 1.5px dashed var(--color-primario);
+  border-radius: var(--radio);
+  padding: 8px 14px;
+  font-size: 13.5px;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+}
+.btn-importar:hover { background: #eaf1fb; }
+.nota-importacion { font-size: 12.5px; color: var(--color-texto-suave); margin: 6px 0 0; }
+
 .btn-link {
   background: none;
   color: var(--color-primario);

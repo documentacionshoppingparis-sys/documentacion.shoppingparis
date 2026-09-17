@@ -1192,6 +1192,8 @@ function OrdenesPago({ perfil, tipo }) {
   const { items, cargando } = useColeccion("ordenesPago", { where: [["tipo", "==", tipo]], orderBy: ["numero", "desc"] });
   const [form, setForm] = useState(null);
   const [reservando, setReservando] = useState(false);
+  const [importando, setImportando] = useState(false);
+  const [mensajeImportacion, setMensajeImportacion] = useState("");
   const puedeCrear = hasPermission(perfil.rol, "crearOrdenes");
   const puedeAprobar = hasPermission(perfil.rol, "aprobarOrdenes");
   const puedePagar = hasPermission(perfil.rol, "procesarPagos");
@@ -1200,6 +1202,7 @@ function OrdenesPago({ perfil, tipo }) {
     setReservando(true);
     const numero = await obtenerSiguienteNumero(meta.contador);
     setReservando(false);
+    setMensajeImportacion("");
     setForm({
       numero,
       empresaId: "", tiendaId: "", sectorId: "", proveedorId: "", solicitanteId: "",
@@ -1207,6 +1210,53 @@ function OrdenesPago({ perfil, tipo }) {
       facturas: "", observaciones: "",
       detalle: [{ descripcion: "", cantidad: 1, precioUnitario: 0 }],
     });
+  };
+
+  /**
+   * Importa la planilla de comisiones (.xlsx) y arma el detalle de la orden
+   * a partir de sus filas. Formato esperado (una fila por funcionario):
+   * N°, NRODOC, APELLIDOS, NOMBRES, CARGO, FECHA INGRESO, TIPO COMP,
+   * CENTRO DE COSTO, SUCURSAL, CM (importe de la comisión).
+   */
+  const importarExcelComision = async (e) => {
+    const archivo = e.target.files && e.target.files[0];
+    e.target.value = ""; // permite volver a elegir el mismo archivo si hace falta reintentar
+    if (!archivo) return;
+    setImportando(true);
+    setMensajeImportacion("");
+    try {
+      const datos = await archivo.arrayBuffer();
+      const libro = XLSX.read(datos, { type: "array" });
+      const hoja = libro.Sheets[libro.SheetNames[0]];
+      const filas = XLSX.utils.sheet_to_json(hoja, { defval: "" });
+
+      const lineasImportadas = filas
+        .filter((f) => (f["APELLIDOS"] || f["NOMBRES"]) && f["CM"] !== "")
+        .map((f) => {
+          const nombre = `${f["APELLIDOS"] || ""} ${f["NOMBRES"] || ""}`.trim();
+          const partes = [nombre];
+          if (f["NRODOC"]) partes.push(`Doc. ${f["NRODOC"]}`);
+          if (f["CARGO"]) partes.push(f["CARGO"]);
+          if (f["SUCURSAL"]) partes.push(f["SUCURSAL"]);
+          return {
+            descripcion: partes.join(" - "),
+            cantidad: 1,
+            precioUnitario: Number(f["CM"]) || 0,
+          };
+        });
+
+      if (lineasImportadas.length === 0) {
+        setMensajeImportacion("No se encontraron filas válidas en la planilla (se esperan columnas APELLIDOS, NOMBRES y CM).");
+      } else {
+        setForm((actual) => ({ ...actual, detalle: lineasImportadas }));
+        setMensajeImportacion(`Se importaron ${lineasImportadas.length} funcionario(s) desde "${archivo.name}".`);
+      }
+    } catch (err) {
+      console.error("Error importando Excel:", err);
+      setMensajeImportacion("No se pudo leer el archivo. Verificá que sea un .xlsx válido con el formato esperado.");
+    } finally {
+      setImportando(false);
+    }
   };
 
   const guardar = async (e) => {
@@ -1331,6 +1381,16 @@ function OrdenesPago({ perfil, tipo }) {
               )}
               <div className="campo-form"><label>Condición de pago</label><input value={form.condicionPago} onChange={(e) => setForm({ ...form, condicionPago: e.target.value })} /></div>
               <div className="campo-form"><label>Facturas relacionadas</label><input value={form.facturas} onChange={(e) => setForm({ ...form, facturas: e.target.value })} /></div>
+              {tipo === "rrhh" && form.concepto === "Comisión" && (
+                <div className="campo-form">
+                  <label>Planilla de comisiones</label>
+                  <label className="btn-importar">
+                    {importando ? "Importando..." : "📄 Importar Excel"}
+                    <input type="file" accept=".xlsx,.xls" onChange={importarExcelComision} disabled={importando} hidden />
+                  </label>
+                  {mensajeImportacion && <p className="nota-importacion">{mensajeImportacion}</p>}
+                </div>
+              )}
             </div>
             <div className="campo-form"><label>Observaciones</label><textarea value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} /></div>
             <label>Detalle</label>
