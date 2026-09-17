@@ -215,6 +215,9 @@ textarea { min-height: 60px; resize: vertical; }
 .logo-thumb { max-height: 28px; max-width: 70px; object-fit: contain; }
 
 .detalle-lineas { margin: 10px 0 16px; }
+.detalle-vista p { margin: 4px 0; font-size: 13.5px; }
+.detalle-vista label { display: block; font-size: 13px; margin: 10px 0 4px; color: var(--color-texto-suave); }
+
 .total-detalle { text-align: right; font-weight: 600; margin-top: 6px; }
 
 .alert { padding: 10px 12px; border-radius: var(--radio); font-size: 13px; margin-bottom: 12px; }

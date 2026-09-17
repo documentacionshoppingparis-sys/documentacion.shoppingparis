@@ -130,6 +130,15 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
   poder ver de un vistazo qué sucursal registró cada uno (antes solo se
   veía la empresa).
 
+## [1.0.9] - 2026-09-16
+
+### Agregado
+- Botón "Ver" en el listado de Presupuestos de Proveedor (junto a PDF,
+  Aprobar, Rechazar): abre una vista de detalle de solo lectura con
+  todos los datos del presupuesto (empresa, tienda, sector, proveedor,
+  vendedor, solicitante, condiciones, observaciones, detalle de líneas
+  y total), con un botón para generar el PDF desde ahí mismo.
+
 ## [1.0.7] - 2026-09-16
 
 ### Agregado

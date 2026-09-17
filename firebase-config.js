@@ -29,4 +29,4 @@ const db = firebase.firestore();
 const secondaryAuth = secondaryApp.auth();
 
 // Constante de versión visible discretamente en la interfaz (sección 41)
-const APP_VERSION = "1.0.8";
+const APP_VERSION = "1.0.9";
