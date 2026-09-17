@@ -509,6 +509,15 @@ function Tiendas({ perfil }) {
   );
 }
 
+/**
+ * Ordena documentos por número descendente en el cliente, en vez de pedirle
+ * el orden a Firestore (evita depender de índices compuestos cuando la
+ * consulta ya combina un filtro "where" con este orden).
+ */
+function ordenarPorNumeroDesc(lista) {
+  return [...lista].sort((a, b) => (Number(b.numero) || 0) - (Number(a.numero) || 0));
+}
+
 /** Etiqueta consistente para mostrar un sector: "código - nombre". */
 function etiquetaSector(s) {
   if (!s) return "";
@@ -982,18 +991,16 @@ function Presupuestos({ perfil }) {
   const { items, cargando } = useColeccion("presupuestos", { orderBy: ["numero", "desc"] });
   const [form, setForm] = useState(null);
   const [viendo, setViendo] = useState(null);
-  const [reservando, setReservando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [errorGuardado, setErrorGuardado] = useState("");
   const puedeCrear = hasPermission(perfil.rol, "crearPresupuestos");
   const puedeAprobar = hasPermission(perfil.rol, "aprobarPresupuestos");
 
-  // El número se reserva al abrir el formulario (como una hoja numerada de
-  // talonario), para que quede visible desde el inicio y no recién al guardar.
-  const abrirNuevo = async () => {
-    setReservando(true);
-    const numero = await obtenerSiguienteNumero("presupuestoProveedor");
-    setReservando(false);
+  // El número se asigna recién al guardar (no al abrir el formulario), para
+  // no "quemar" números de talonario si el usuario abre y cancela sin guardar.
+  const abrirNuevo = () => {
+    setErrorGuardado("");
     setForm({
-      numero,
       empresaId: "", tiendaId: "", sectorId: "", proveedorId: "", vendedor: "", solicitanteId: "",
       moneda: "PYG", condiciones: "", formaPago: "", prioridad: "normal", observaciones: "",
       detalle: [{ descripcion: "", cantidad: 1, precioUnitario: 0 }],
@@ -1002,35 +1009,45 @@ function Presupuestos({ perfil }) {
 
   const guardar = async (e) => {
     e.preventDefault();
-    const empresa = empresas.find((x) => x.id === form.empresaId);
-    const tienda = tiendas.find((x) => x.id === form.tiendaId);
-    const sector = sectores.find((x) => x.id === form.sectorId);
-    const proveedor = proveedores.find((x) => x.id === form.proveedorId);
-    const solicitante = personas.find((x) => x.id === form.solicitanteId);
-    const total = form.detalle.reduce((acc, l) => acc + (Number(l.cantidad) || 0) * (Number(l.precioUnitario) || 0), 0);
+    setErrorGuardado("");
+    setGuardando(true);
+    try {
+      const empresa = empresas.find((x) => x.id === form.empresaId);
+      const tienda = tiendas.find((x) => x.id === form.tiendaId);
+      const sector = sectores.find((x) => x.id === form.sectorId);
+      const proveedor = proveedores.find((x) => x.id === form.proveedorId);
+      const solicitante = personas.find((x) => x.id === form.solicitanteId);
+      const total = form.detalle.reduce((acc, l) => acc + (Number(l.cantidad) || 0) * (Number(l.precioUnitario) || 0), 0);
+      const numero = await obtenerSiguienteNumero("presupuestoProveedor");
 
-    const registro = {
-      numero: form.numero,
-      fecha: firebase.firestore.FieldValue.serverTimestamp(),
-      empresaId: form.empresaId, empresaNombre: empresa ? empresa.razonSocial : null,
-      tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
-      sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
-      proveedorId: form.proveedorId || null, proveedorNombre: proveedor ? proveedor.razonSocial : null,
-      // Copia histórica de los datos del proveedor y del vendedor (sección 7):
-      // el PDF no debe depender de que el maestro de proveedores no cambie después.
-      proveedorDireccion: proveedor ? proveedor.direccion || null : null,
-      proveedorTelefono: proveedor ? proveedor.telefono || null : null,
-      vendedor: form.vendedor || null,
-      solicitadoPor: solicitante ? { personaId: solicitante.id, nombre: `${solicitante.nombre} ${solicitante.apellido}`, cargo: solicitante.cargo || null, sector: sector ? sector.nombre : null } : null,
-      moneda: form.moneda, detalle: form.detalle, total,
-      condiciones: form.condiciones, formaPago: form.formaPago, prioridad: form.prioridad,
-      observaciones: form.observaciones, estado: "pendiente",
-      creadoPor: perfil.nombre, creadoPorUid: perfil.uid,
-      fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
-    };
-    const ref = await db.collection("presupuestos").add(registro);
-    await registrarAuditoria({ accion: "CREACION", documentoId: ref.id, documentoTipo: "presupuesto", perfil, estadoNuevo: "pendiente" });
-    setForm(null);
+      const registro = {
+        numero,
+        fecha: firebase.firestore.FieldValue.serverTimestamp(),
+        empresaId: form.empresaId, empresaNombre: empresa ? empresa.razonSocial : null,
+        tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
+        sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
+        proveedorId: form.proveedorId || null, proveedorNombre: proveedor ? proveedor.razonSocial : null,
+        // Copia histórica de los datos del proveedor y del vendedor (sección 7):
+        // el PDF no debe depender de que el maestro de proveedores no cambie después.
+        proveedorDireccion: proveedor ? proveedor.direccion || null : null,
+        proveedorTelefono: proveedor ? proveedor.telefono || null : null,
+        vendedor: form.vendedor || null,
+        solicitadoPor: solicitante ? { personaId: solicitante.id, nombre: `${solicitante.nombre} ${solicitante.apellido}`, cargo: solicitante.cargo || null, sector: sector ? sector.nombre : null } : null,
+        moneda: form.moneda, detalle: form.detalle, total,
+        condiciones: form.condiciones, formaPago: form.formaPago, prioridad: form.prioridad,
+        observaciones: form.observaciones, estado: "pendiente",
+        creadoPor: perfil.nombre, creadoPorUid: perfil.uid,
+        fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      const ref = await db.collection("presupuestos").add(registro);
+      await registrarAuditoria({ accion: "CREACION", documentoId: ref.id, documentoTipo: "presupuesto", perfil, estadoNuevo: "pendiente" });
+      setForm(null);
+    } catch (err) {
+      console.error("Error guardando presupuesto:", err);
+      setErrorGuardado(err && err.message ? err.message : "No se pudo guardar el presupuesto. Intentá de nuevo.");
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const cambiarEstado = async (item, nuevoEstado) => {
@@ -1042,7 +1059,7 @@ function Presupuestos({ perfil }) {
     <div className="panel">
       <div className="panel-header">
         <h2>Presupuestos de Proveedor</h2>
-        {puedeCrear && <button onClick={abrirNuevo} disabled={reservando}>{reservando ? "Generando N.º..." : "+ Nuevo presupuesto"}</button>}
+        {puedeCrear && <button onClick={abrirNuevo}>+ Nuevo presupuesto</button>}
       </div>
       {cargando ? <p>Cargando...</p> : (
         <table className="tabla">
@@ -1073,7 +1090,8 @@ function Presupuestos({ perfil }) {
       {form && (
         <div className="modal-fondo" onClick={() => setForm(null)}>
           <form className="modal-caja modal-grande" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
-            <h3>Nuevo Presupuesto <span className="numero-reservado">N.º {form.numero}</span></h3>
+            <h3>Nuevo Presupuesto</h3>
+            {errorGuardado && <div className="alert alert-error">{errorGuardado}</div>}
             <div className="grid-2">
               <div className="campo-form"><label>Empresa *</label>
                 <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value, tiendaId: "" })}>
@@ -1125,8 +1143,8 @@ function Presupuestos({ perfil }) {
             <label>Detalle</label>
             <DetalleLineas lineas={form.detalle} setLineas={(l) => setForm({ ...form, detalle: l })} />
             <div className="modal-acciones">
-              <button type="button" className="btn-secundario" onClick={() => setForm(null)}>Cancelar</button>
-              <button type="submit">Guardar</button>
+              <button type="button" className="btn-secundario" onClick={() => setForm(null)} disabled={guardando}>Cancelar</button>
+              <button type="submit" disabled={guardando}>{guardando ? "Guardando..." : "Guardar"}</button>
             </div>
           </form>
         </div>
@@ -1189,22 +1207,23 @@ function OrdenesPago({ perfil, tipo }) {
   const meta = TIPOS_ORDEN[tipo];
   const { empresas, tiendas, sectores, personas, proveedores } = useContextoSelects();
   const { items: presupuestosAprobados } = useColeccion("presupuestos", { where: [["estado", "==", "aprobado"]] });
-  const { items, cargando } = useColeccion("ordenesPago", { where: [["tipo", "==", tipo]], orderBy: ["numero", "desc"] });
+  const { items: itemsSinOrdenar, cargando } = useColeccion("ordenesPago", { where: [["tipo", "==", tipo]] });
+  const items = ordenarPorNumeroDesc(itemsSinOrdenar);
   const [form, setForm] = useState(null);
-  const [reservando, setReservando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [errorGuardado, setErrorGuardado] = useState("");
   const [importando, setImportando] = useState(false);
   const [mensajeImportacion, setMensajeImportacion] = useState("");
   const puedeCrear = hasPermission(perfil.rol, "crearOrdenes");
   const puedeAprobar = hasPermission(perfil.rol, "aprobarOrdenes");
   const puedePagar = hasPermission(perfil.rol, "procesarPagos");
 
-  const abrirNuevo = async () => {
-    setReservando(true);
-    const numero = await obtenerSiguienteNumero(meta.contador);
-    setReservando(false);
+  // El número se asigna recién al guardar (no al abrir el formulario), para
+  // no "quemar" números de talonario si el usuario abre y cancela sin guardar.
+  const abrirNuevo = () => {
+    setErrorGuardado("");
     setMensajeImportacion("");
     setForm({
-      numero,
       empresaId: "", tiendaId: "", sectorId: "", proveedorId: "", solicitanteId: "",
       presupuestoId: "", moneda: "PYG", concepto: "", condicionPago: "", formaPago: "",
       facturas: "", observaciones: "",
@@ -1261,32 +1280,42 @@ function OrdenesPago({ perfil, tipo }) {
 
   const guardar = async (e) => {
     e.preventDefault();
-    const empresa = empresas.find((x) => x.id === form.empresaId);
-    const tienda = tiendas.find((x) => x.id === form.tiendaId);
-    const sector = sectores.find((x) => x.id === form.sectorId);
-    const proveedor = proveedores.find((x) => x.id === form.proveedorId);
-    const solicitante = personas.find((x) => x.id === form.solicitanteId);
-    const presupuesto = presupuestosAprobados.find((x) => x.id === form.presupuestoId);
-    const total = form.detalle.reduce((acc, l) => acc + (Number(l.cantidad) || 0) * (Number(l.precioUnitario) || 0), 0);
+    setErrorGuardado("");
+    setGuardando(true);
+    try {
+      const empresa = empresas.find((x) => x.id === form.empresaId);
+      const tienda = tiendas.find((x) => x.id === form.tiendaId);
+      const sector = sectores.find((x) => x.id === form.sectorId);
+      const proveedor = proveedores.find((x) => x.id === form.proveedorId);
+      const solicitante = personas.find((x) => x.id === form.solicitanteId);
+      const presupuesto = presupuestosAprobados.find((x) => x.id === form.presupuestoId);
+      const total = form.detalle.reduce((acc, l) => acc + (Number(l.cantidad) || 0) * (Number(l.precioUnitario) || 0), 0);
+      const numero = await obtenerSiguienteNumero(meta.contador);
 
-    const registro = {
-      tipo, numero: form.numero,
-      fecha: firebase.firestore.FieldValue.serverTimestamp(),
-      presupuestoId: form.presupuestoId || null, presupuestoNumero: presupuesto ? presupuesto.numero : null,
-      empresaId: form.empresaId, empresaNombre: empresa ? empresa.razonSocial : null,
-      tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
-      sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
-      proveedorId: form.proveedorId || null, proveedorNombre: proveedor ? proveedor.razonSocial : null,
-      solicitadoPor: solicitante ? { personaId: solicitante.id, nombre: `${solicitante.nombre} ${solicitante.apellido}`, cargo: solicitante.cargo || null, sector: sector ? sector.nombre : null } : null,
-      concepto: form.concepto, moneda: form.moneda, detalle: form.detalle, total,
-      condicionPago: form.condicionPago, formaPago: form.formaPago, facturas: form.facturas,
-      observaciones: form.observaciones, estado: "pendiente",
-      creadoPor: perfil.nombre, creadoPorUid: perfil.uid,
-      fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
-    };
-    const ref = await db.collection("ordenesPago").add(registro);
-    await registrarAuditoria({ accion: "CREACION", documentoId: ref.id, documentoTipo: `ordenPago_${tipo}`, perfil, estadoNuevo: "pendiente" });
-    setForm(null);
+      const registro = {
+        tipo, numero,
+        fecha: firebase.firestore.FieldValue.serverTimestamp(),
+        presupuestoId: form.presupuestoId || null, presupuestoNumero: presupuesto ? presupuesto.numero : null,
+        empresaId: form.empresaId, empresaNombre: empresa ? empresa.razonSocial : null,
+        tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
+        sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
+        proveedorId: form.proveedorId || null, proveedorNombre: proveedor ? proveedor.razonSocial : null,
+        solicitadoPor: solicitante ? { personaId: solicitante.id, nombre: `${solicitante.nombre} ${solicitante.apellido}`, cargo: solicitante.cargo || null, sector: sector ? sector.nombre : null } : null,
+        concepto: form.concepto, moneda: form.moneda, detalle: form.detalle, total,
+        condicionPago: form.condicionPago, formaPago: form.formaPago, facturas: form.facturas,
+        observaciones: form.observaciones, estado: "pendiente",
+        creadoPor: perfil.nombre, creadoPorUid: perfil.uid,
+        fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      const ref = await db.collection("ordenesPago").add(registro);
+      await registrarAuditoria({ accion: "CREACION", documentoId: ref.id, documentoTipo: `ordenPago_${tipo}`, perfil, estadoNuevo: "pendiente" });
+      setForm(null);
+    } catch (err) {
+      console.error("Error guardando orden de pago:", err);
+      setErrorGuardado(err && err.message ? err.message : "No se pudo guardar la orden. Intentá de nuevo.");
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const cambiarEstado = async (item, nuevoEstado) => {
@@ -1298,7 +1327,7 @@ function OrdenesPago({ perfil, tipo }) {
     <div className="panel">
       <div className="panel-header">
         <h2>{meta.label}</h2>
-        {puedeCrear && <button onClick={abrirNuevo} disabled={reservando}>{reservando ? "Generando N.º..." : "+ Nueva orden"}</button>}
+        {puedeCrear && <button onClick={abrirNuevo}>+ Nueva orden</button>}
       </div>
       {cargando ? <p>Cargando...</p> : (
         <table className="tabla">
@@ -1326,7 +1355,8 @@ function OrdenesPago({ perfil, tipo }) {
       {form && (
         <div className="modal-fondo" onClick={() => setForm(null)}>
           <form className="modal-caja modal-grande" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
-            <h3>Nueva {meta.label} <span className="numero-reservado">N.º {form.numero}</span></h3>
+            <h3>Nueva {meta.label}</h3>
+            {errorGuardado && <div className="alert alert-error">{errorGuardado}</div>}
             <div className="grid-2">
               <div className="campo-form"><label>Empresa *</label>
                 <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value, tiendaId: "" })}>
@@ -1396,8 +1426,8 @@ function OrdenesPago({ perfil, tipo }) {
             <label>Detalle</label>
             <DetalleLineas lineas={form.detalle} setLineas={(l) => setForm({ ...form, detalle: l })} />
             <div className="modal-acciones">
-              <button type="button" className="btn-secundario" onClick={() => setForm(null)}>Cancelar</button>
-              <button type="submit">Guardar</button>
+              <button type="button" className="btn-secundario" onClick={() => setForm(null)} disabled={guardando}>Cancelar</button>
+              <button type="submit" disabled={guardando}>{guardando ? "Guardando..." : "Guardar"}</button>
             </div>
           </form>
         </div>
@@ -1414,16 +1444,14 @@ function OrdenesCobro({ perfil }) {
   const { empresas, tiendas, sectores, personas } = useContextoSelects();
   const { items, cargando } = useColeccion("ordenesCobro", { orderBy: ["numero", "desc"] });
   const [form, setForm] = useState(null);
-  const [reservando, setReservando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [errorGuardado, setErrorGuardado] = useState("");
   const puedeCrear = hasPermission(perfil.rol, "crearOrdenes");
   const puedeAprobar = hasPermission(perfil.rol, "aprobarOrdenes");
 
-  const abrirNuevo = async () => {
-    setReservando(true);
-    const numero = await obtenerSiguienteNumero("ordenCobro");
-    setReservando(false);
+  const abrirNuevo = () => {
+    setErrorGuardado("");
     setForm({
-      numero,
       empresaId: "", tiendaId: "", sectorId: "", responsableId: "",
       obligado: "", concepto: "", moneda: "PYG", importe: 0, observaciones: "",
     });
@@ -1431,25 +1459,35 @@ function OrdenesCobro({ perfil }) {
 
   const guardar = async (e) => {
     e.preventDefault();
-    const empresa = empresas.find((x) => x.id === form.empresaId);
-    const tienda = tiendas.find((x) => x.id === form.tiendaId);
-    const sector = sectores.find((x) => x.id === form.sectorId);
-    const responsable = personas.find((x) => x.id === form.responsableId);
-    const registro = {
-      numero: form.numero, fecha: firebase.firestore.FieldValue.serverTimestamp(),
-      empresaId: form.empresaId, empresaNombre: empresa ? empresa.razonSocial : null,
-      tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
-      sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
-      obligado: form.obligado, concepto: form.concepto,
-      responsablePor: responsable ? { personaId: responsable.id, nombre: `${responsable.nombre} ${responsable.apellido}`, cargo: responsable.cargo || null } : null,
-      moneda: form.moneda, total: Number(form.importe) || 0,
-      observaciones: form.observaciones, estado: "pendiente",
-      creadoPor: perfil.nombre, creadoPorUid: perfil.uid,
-      fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
-    };
-    const ref = await db.collection("ordenesCobro").add(registro);
-    await registrarAuditoria({ accion: "CREACION", documentoId: ref.id, documentoTipo: "ordenCobro", perfil, estadoNuevo: "pendiente" });
-    setForm(null);
+    setErrorGuardado("");
+    setGuardando(true);
+    try {
+      const empresa = empresas.find((x) => x.id === form.empresaId);
+      const tienda = tiendas.find((x) => x.id === form.tiendaId);
+      const sector = sectores.find((x) => x.id === form.sectorId);
+      const responsable = personas.find((x) => x.id === form.responsableId);
+      const numero = await obtenerSiguienteNumero("ordenCobro");
+      const registro = {
+        numero, fecha: firebase.firestore.FieldValue.serverTimestamp(),
+        empresaId: form.empresaId, empresaNombre: empresa ? empresa.razonSocial : null,
+        tiendaId: form.tiendaId || null, tiendaNombre: tienda ? tienda.nombre : null,
+        sectorId: form.sectorId || null, sectorNombre: sector ? etiquetaSector(sector) : null,
+        obligado: form.obligado, concepto: form.concepto,
+        responsablePor: responsable ? { personaId: responsable.id, nombre: `${responsable.nombre} ${responsable.apellido}`, cargo: responsable.cargo || null } : null,
+        moneda: form.moneda, total: Number(form.importe) || 0,
+        observaciones: form.observaciones, estado: "pendiente",
+        creadoPor: perfil.nombre, creadoPorUid: perfil.uid,
+        fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      const ref = await db.collection("ordenesCobro").add(registro);
+      await registrarAuditoria({ accion: "CREACION", documentoId: ref.id, documentoTipo: "ordenCobro", perfil, estadoNuevo: "pendiente" });
+      setForm(null);
+    } catch (err) {
+      console.error("Error guardando orden de cobro:", err);
+      setErrorGuardado(err && err.message ? err.message : "No se pudo guardar la orden de cobro. Intentá de nuevo.");
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const cambiarEstado = async (item, nuevoEstado) => {
@@ -1461,7 +1499,7 @@ function OrdenesCobro({ perfil }) {
     <div className="panel">
       <div className="panel-header">
         <h2>Órdenes de Cobro</h2>
-        {puedeCrear && <button onClick={abrirNuevo} disabled={reservando}>{reservando ? "Generando N.º..." : "+ Nueva orden de cobro"}</button>}
+        {puedeCrear && <button onClick={abrirNuevo}>+ Nueva orden de cobro</button>}
       </div>
       {cargando ? <p>Cargando...</p> : (
         <table className="tabla">
@@ -1486,7 +1524,8 @@ function OrdenesCobro({ perfil }) {
       {form && (
         <div className="modal-fondo" onClick={() => setForm(null)}>
           <form className="modal-caja" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
-            <h3>Nueva Orden de Cobro <span className="numero-reservado">N.º {form.numero}</span></h3>
+            <h3>Nueva Orden de Cobro</h3>
+            {errorGuardado && <div className="alert alert-error">{errorGuardado}</div>}
             <div className="campo-form"><label>Empresa *</label>
               <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value })}>
                 <option value="">Seleccionar...</option>
@@ -1517,8 +1556,8 @@ function OrdenesCobro({ perfil }) {
             </div>
             <div className="campo-form"><label>Observaciones</label><textarea value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} /></div>
             <div className="modal-acciones">
-              <button type="button" className="btn-secundario" onClick={() => setForm(null)}>Cancelar</button>
-              <button type="submit">Guardar</button>
+              <button type="button" className="btn-secundario" onClick={() => setForm(null)} disabled={guardando}>Cancelar</button>
+              <button type="submit" disabled={guardando}>{guardando ? "Guardando..." : "Guardar"}</button>
             </div>
           </form>
         </div>
@@ -1601,7 +1640,8 @@ function Historial({ perfil }) {
   const where = [];
   if (filtroEmpresa) where.push(["empresaId", "==", filtroEmpresa]);
   if (filtroEstado) where.push(["estado", "==", filtroEstado]);
-  const { items, cargando } = useColeccion(tipoDoc === "ordenesPago" ? "ordenesPago" : tipoDoc, { where, orderBy: ["numero", "desc"] });
+  const { items: itemsSinOrdenar, cargando } = useColeccion(tipoDoc === "ordenesPago" ? "ordenesPago" : tipoDoc, { where });
+  const items = ordenarPorNumeroDesc(itemsSinOrdenar);
 
   return (
     <div className="panel">

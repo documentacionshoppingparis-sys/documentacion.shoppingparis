@@ -114,6 +114,17 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
   el encabezado genérico por ahora; se irán migrando a su propio formato
   uno por uno.
 
+## [1.0.7] - 2026-09-16
+
+### Agregado
+- Campo "Logo" también en el maestro de Tiendas/Sucursales (Maestros >
+  Tiendas / Sucursales), para las sucursales que tienen su propio logo
+  distinto al de la empresa matriz (ej. "Punto Eléctrico" dentro de
+  K&K Shopping's).
+- El PDF del Presupuesto de Proveedor ahora usa el logo de la tienda/
+  sucursal seleccionada si tiene uno cargado; si no, usa el logo de la
+  empresa.
+
 ## [1.0.8] - 2026-09-16
 
 ### Corregido
@@ -153,13 +164,24 @@ Formato basado en versionado semántico (`MAJOR.MINOR.PATCH`):
   que hubiera cargadas manualmente. Si el archivo no tiene el formato
   esperado, se muestra un aviso en vez de fallar en silencio.
 
-## [1.0.7] - 2026-09-16
+## [1.1.1] - 2026-09-16
 
-### Agregado
-- Campo "Logo" también en el maestro de Tiendas/Sucursales (Maestros >
-  Tiendas / Sucursales), para las sucursales que tienen su propio logo
-  distinto al de la empresa matriz (ej. "Punto Eléctrico" dentro de
-  K&K Shopping's).
-- El PDF del Presupuesto de Proveedor ahora usa el logo de la tienda/
-  sucursal seleccionada si tiene uno cargado; si no, usa el logo de la
-  empresa.
+### Corregido
+- **Bug importante**: el listado de "Orden de Pago - RR.HH." (y el resto
+  de Órdenes de Pago) y el Historial nunca mostraban resultados, aunque
+  el documento sí se hubiera guardado. Causa: la consulta combinaba un
+  filtro (`where tipo == ...`) con un orden (`orderBy numero`) sobre un
+  campo distinto, lo cual requiere un índice compuesto en Firestore que
+  no estaba creado; la consulta fallaba en silencio (el error solo
+  quedaba en la consola del navegador). Se corrige pidiendo los datos
+  sin `orderBy` y ordenando por número en el cliente, igual que ya se
+  hacía con los sectores.
+- Se agrega manejo de errores visible al guardar Presupuestos, Órdenes
+  de Pago y Órdenes de Cobro: si el guardado falla por cualquier motivo,
+  ahora aparece un mensaje de error dentro del formulario (antes fallaba
+  en silencio y parecía que "no pasaba nada").
+
+### Cambiado
+- Se revierte el número de documento a asignarse recién **al guardar**
+  (no al abrir el formulario "Nuevo"), para no consumir números de
+  talonario cuando se abre y se cancela sin guardar.
